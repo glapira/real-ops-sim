@@ -1,0 +1,63 @@
+# Performance Quick-Reference — FlyByWire A32NX (A320neo community mod)
+#
+# Sim-use quick reference. Numbers are typical values suitable for planning
+# a home-sim flight; they are NOT AFM data and must not be used for real ops.
+# The FBW A32NX is a community open-source project modelling the A320neo.
+
+aircraft:
+  type: Airbus A320neo (as modelled by FlyByWire A32NX)
+  sim_source: FlyByWire A32NX community mod (MSFS 2020/2024)
+  engines: 2 x CFM LEAP-1A26
+  crew_concept: two-pilot fly-by-wire
+
+weights_kg:
+  mtow: 79000
+  mlw: 67400
+  mzfw: 64300
+  typical_oew: 42600
+  max_fuel: 18730  # approximate, standard tanks
+
+speeds_kt:
+  # Typical values at mid-weight (~68000 kg TOW), CONF 1+F.
+  v1_typical: 137
+  vr_typical: 140
+  v2_typical: 145
+  green_dot_typical: 214   # best L/D clean speed
+  flap_retract_schedule:
+    - conf_1_to_clean: "S speed (~200 kt)"
+    - conf_2_to_1:     "F speed (~180 kt)"
+    - conf_3_to_2:     "F speed"
+    - full_to_3:       "not typically retracted before landing"
+  climb_below_10000: 250
+  climb_above_10000: 290_or_M0.78
+  cruise_mach_typical: 0.78
+  descent_mach: 0.78
+  descent_below_10000: 250
+  vref_conf_full_typical: 138  # at ~62000 kg landing weight
+
+fuel_burn_kg_per_hour:
+  climb_average: 3500
+  cruise_at_fl360_typical: 2400
+  cruise_at_fl380_typical: 2250
+  descent_idle_average: 900
+
+typical_landing_distance_m:
+  # Unfactored dry runway, CONF FULL, sea level, ISA, autobrake MED.
+  at_58000_kg: 1350
+  at_62000_kg: 1450
+  at_mlw:      1600
+
+runway_rules_of_thumb:
+  min_dry_runway_at_mtow_m: 2100
+  min_dry_runway_typical_landing_m: 1700
+
+notes:
+  - "FBW A32NX models managed climb / descent / approach speeds accurately when the FMS is properly set up."
+  - "Use FLEX temperature for takeoff whenever possible; TOGA only when performance requires."
+  - "Autobrake MED is standard for most operators on the A320 family; LOW for long dry runways, MAX only when required."
+  - "Green Dot speed is the best-L/D clean speed and the default engine-out climb target on the A320."
+
+sources:
+  - "FlyByWire A32NX documentation (docs.flybywiresim.com)"
+  - "Airbus Getting to Grips with Aircraft Performance (publicly available)"
+  - "Community operator OFPs for A320neo type"

@@ -1,0 +1,139 @@
+# Performance Quick-Reference — Daher TBM 930 (default MSFS 2024)
+#
+# Sim-use quick reference. Numbers are typical values suitable for planning
+# a home-sim flight; they are NOT AFM data and must not be used for real ops.
+# The TBM 930 is a single-engine turboprop with Garmin G3000 avionics.
+# Sources: Daher TBM 930 Pilot's Information Manual and Specs & Price List
+# (publicly available), Daher/SIMCOM recommended flight profiles, and
+# commonly-cited community figures for the default MSFS TBM 930.
+
+aircraft:
+  type: Daher TBM 930
+  sim_source: Default MSFS 2024 (also default MSFS 2020)
+  engines: 1 x P&W Canada PT6A-66D turboprop, 850 SHP flat-rated
+  propeller: 5-blade Hartzell composite
+  avionics: Garmin G3000
+  crew_concept: single-pilot certified turboprop
+
+weights_kg:
+  mrw: 3370
+  mtow: 3354
+  mlw:  3186
+  mzfw: 2736
+  typical_oew: 2100     # ≈ 4629 lb; varies by equipment
+  max_fuel: 875         # ≈ 1928 lb / 292 US gal usable Jet-A
+
+weights_lb:
+  mrw: 7430
+  mtow: 7394
+  mlw:  7024
+  mzfw: 6032
+  typical_oew: 4629
+  max_fuel: 1928        # 292 US gal usable
+
+speeds_kt:
+  # From Daher TBM 930 PIM. VR varies with published source: 90 KIAS
+  # in the standard SIMCOM/Daher checklist, ~113 KIAS quoted in some
+  # community MSFS references at MTOW — the 90 KIAS figure is authoritative.
+  vr_typical: 90
+  vx_best_angle_climb: 100
+  vy_best_rate_climb_sea_level: 124
+  va_maneuvering: 158
+  vfe_flaps_takeoff: 178
+  vfe_flaps_landing: 122
+  vlo_gear_extend: 178
+  vlo_gear_retract: 150
+  vle_gear_extended: 178
+  vmo_max_operating: 266
+  mmo_max_mach: 0.52
+  vs_stall_clean: 79        # KCAS
+  vso_stall_landing: 65     # KCAS
+  best_glide_gear_flaps_up: 120
+  vref_approach_flaps_ldg_typical: 85   # at ~3000 kg landing weight
+  vref_at_mlw: 85                        # rounded from 83 KCAS
+  vref_light_weight_2600kg: 77           # at ~5700 lb
+
+  climb_below_10000: 170       # typical FLC target after clean-up
+  climb_above_10000: 170
+  cruise_max_at_fl280: 330     # KTAS, max cruise power
+  cruise_normal_at_fl280: 290  # KTAS
+  cruise_long_range_at_fl310: 252  # KTAS
+  descent_typical: 240         # KIAS clean, ~2000 fpm
+
+fuel_burn_gph:
+  # US gallons per hour of Jet-A. From Daher PIM cruise tables + community.
+  taxi_ground_idle: 18
+  climb_average: 65
+  cruise_fl200_normal: 68
+  cruise_fl250_normal: 65
+  cruise_fl280_normal: 60
+  cruise_fl310_max_cruise: 58
+  cruise_fl310_long_range: 42
+  descent_idle_average: 30
+  economy_cruise_manufacturer_quote: 37  # Daher marketing figure at long-range
+
+fuel_burn_kg_per_hour:
+  # 1 US gal Jet-A ≈ 3.03 kg. Derived from GPH figures above.
+  taxi_ground_idle: 55
+  climb_average: 197
+  cruise_fl280_normal: 182
+  cruise_fl310_max_cruise: 176
+  cruise_fl310_long_range: 127
+
+typical_runway_distance_m:
+  # Daher PIM: ISA, MTOW, no wind, sea level, 50 ft obstacle clearance.
+  takeoff_over_50ft_mtow_sl: 726     # 2380 ft
+  landing_over_50ft_mtow_sl: 741     # 2430 ft
+  takeoff_ground_roll_typical: 460   # ~1500 ft in the sim at MTOW
+  landing_ground_roll_typical: 550   # ~1800 ft at MLW dry
+
+range_nm:
+  # From Daher PIM: ISA, no wind, single pilot, 45 min NBAA reserve, from FL310.
+  at_252_ktas_long_range: 1730
+  at_290_ktas_normal: 1585
+  at_326_ktas_max_cruise: 1440
+
+ceiling:
+  service_ceiling_ft: 31000
+  optimum_cruise_band_ft: "FL280 to FL310"
+  time_to_climb_fl310_minutes: 19    # 18:45 per Daher PIM
+
+limits:
+  max_crosswind_kt: 25
+  max_operating_altitude_ft: 31000
+  rvsm_required_above_ft: 29000
+
+typical_profiles:
+  climb:
+    - "After takeoff at Vr 90 KIAS, accelerate to Vy 124 KIAS, gear up."
+    - "Above 1000 ft AGL, engage AP, set FLC and accelerate to 170 KIAS."
+    - "Maintain ~90% torque during climb; watch ITT limit."
+    - "Direct climb to FL280 or FL310 for legs > 400 NM."
+  cruise:
+    - "FL280 to FL310 is the sweet spot for the flat-rated PT6A-66D."
+    - "Below FL200 the engine is over-torquing for the drag — 30% efficiency loss."
+    - "For max range, reduce torque to ~80% at FL310: lose ~25 kt TAS, gain ~12% efficiency."
+  approach:
+    - "At ~35% torque the aircraft settles at ~150 KIAS clean."
+    - "Two dots above glideslope: gear down. One dot above: flaps TO."
+    - "At glideslope intercept: 22% torque, full flaps, target 85 KIAS on final."
+    - "Peg the AoA white reference line — that is 1.3 Vso at any weight."
+    - "At 50 ft AGL: torque at or slightly above 10% to prevent nose-heavy flare."
+    - "Full-stall touchdown in 3-7° nose-up attitude."
+
+notes:
+  - "The TBM 930 is a legitimately fast single-engine turboprop; it flies like a light jet on approach but requires precise energy management on final."
+  - "Approach speed for the TBM 900/910/930/940 series is 83 KIAS at MLW, rounded to 85 KIAS in practice. Any faster and you will float and risk wheelbarrow / prop strike."
+  - "The PT6A-66D is flat-rated to 850 SHP; power available drops above ISA+10°C."
+  - "For legs under 250 NM, cruising at FL230-FL250 is more time-efficient than climbing to FL310."
+  - "MSFS 2024 default TBM 930 modelling is generally faithful to published performance; the G3000 handles most speed and configuration management."
+  - "Rotation speed differs between sources: the Daher/SIMCOM checklist uses VR = 90 KIAS at MTOW; some community sim references quote VR = 113 KIAS. The 90 KIAS figure is from the Daher PIM and should be preferred."
+
+sources:
+  - "Daher-Socata TBM 930 Pilot's Information Manual (publicly available PDF)"
+  - "Daher TBM 930 2016 Specifications & Price List (aeroexpo.online)"
+  - "Daher TBM 930 2017 Specifications & Price List (aeroexpo.online)"
+  - "SIMCOM 900/910/930/940 Flight Profiles (tbmowners.org)"
+  - "AOPA 'TBM Technique: Landing in Style' (Jan 2021)"
+  - "Flying Magazine 'The TBM 930 Is Another Daher Masterpiece' (Sep 2016)"
+  - "Community MSFS performance references (flightchecklist.app, pilotleague.com)"

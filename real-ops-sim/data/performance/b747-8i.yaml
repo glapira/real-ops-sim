@@ -1,0 +1,63 @@
+# Performance Quick-Reference — Boeing 747-8I (default MSFS 2024)
+#
+# Sim-use quick reference. Numbers are typical values suitable for planning
+# a home-sim flight; they are NOT AFM data and must not be used for real ops.
+# Sources: Boeing published 747-8 airport planning document (public), and
+# commonly-cited operator figures for the 747-8I in the sim community.
+
+aircraft:
+  type: Boeing 747-8I
+  sim_source: Default MSFS 2024
+  engines: 4 x GEnx-2B67
+  crew_concept: two-pilot glass cockpit
+
+weights_kg:
+  mtow: 447700
+  mlw: 312075
+  mzfw: 295742
+  typical_oew: 220100
+  max_fuel: 174375  # approximate, based on tank capacity
+
+speeds_kt:
+  # Typical values at mid-weight (~360000 kg TOW). Adjust for your weight.
+  v1_typical: 152
+  vr_typical: 162
+  v2_typical: 172
+  flap_retract_schedule:
+    - flaps_20: 175
+    - flaps_10: 195
+    - flaps_5:  215
+    - flaps_1:  235
+    - flaps_up: 260
+  climb_below_10000: 250
+  climb_above_10000: 320
+  cruise_mach_typical: 0.855
+  descent_mach: 0.85
+  descent_below_10000: 250
+  vref_flaps_30_typical: 148  # at ~275000 kg landing weight
+
+fuel_burn_kg_per_hour:
+  climb_average: 14000
+  cruise_at_fl350_typical: 10500
+  cruise_at_fl380_typical: 9800
+  descent_idle_average: 3500
+
+typical_landing_distance_m:
+  # Unfactored dry runway, flaps 30, sea level, ISA. Add margin.
+  at_260000_kg: 1700
+  at_300000_kg: 2000
+  at_mlw:       2300
+
+runway_rules_of_thumb:
+  min_dry_runway_at_mtow_m: 3100
+  min_dry_runway_typical_landing_m: 2200
+
+notes:
+  - "Fuel burn increases roughly 4-6% per FL200 below optimum cruise altitude."
+  - "Trim setting for takeoff varies with CG. Use in-sim takeoff performance tool if available."
+  - "Sim autothrottle handles most of the workload; verify N1 targets manually on rotation."
+  - "MSFS 2024 default 747-8 tends to over-perform vs published data at high weights; treat these numbers as optimistic."
+
+sources:
+  - "Boeing 747-8 Airport Planning Document (publicly available on boeing.com)"
+  - "Community performance figures compiled from virtual-airline OFPs"
