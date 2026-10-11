@@ -86,3 +86,9 @@ Everything here is written from scratch: geometry, people, aircraft, brain and U
 The page loads real models from `models/` (pass `models: 'app/ops-airport/models/'` or wherever you copy them, or `models: false` to keep the drawn ones). They come from FlightGear's GPL aircraft: the 787-8, A320, CRJ700 (standing in for the Global 8000), Dornier 228, the Volvo fuel and catering trucks, the pushback tug and the Follow-Me car. `models/README.md` lists sources and authors. Each model loads in the background and replaces the drawn stand-in when it arrives. The whole set is about 13 MB, cached by the browser after the first visit.
 
 The Solidaire livery is painted onto each model's own texture by `tools/build_models.py`, so it sits on the real panel lines, doors and windows. To change the livery or registrations, edit that script and rebuild.
+
+## Textures, water and light
+
+`textures/` holds real surface textures: FlightGear runway tiles (threshold, designators, touchdown zones, aiming point, centreline), taxiway asphalt, airport grass, an aerial car park, and three.js water normals (sources in `textures/README.md`). Pass `textures: '<path>/'`, or `textures: false` for the painted fallbacks.
+
+On desktop the sea is a reflective water shader (adapted from three.js Water, MIT) with shallow turquoise near the beach, deep blue offshore and a surf line. The picture renders in HDR with a light bloom and 4K shadows. Phones keep the lighter path: no mirror, no bloom, 1K shadows. Options: `water: false`, `bloom: false`.

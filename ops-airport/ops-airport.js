@@ -236,7 +236,7 @@ function mount(container, opts) {
   const hemi = new T.HemisphereLight(0xfff6ea, 0xb9c2b0, 0.9 * LS); scene.add(hemi);
   const sun = new T.DirectionalLight(0xfff1dc, 1.4 * LS);
   sun.castShadow = true;
-  sun.shadow.mapSize.set(isPhone ? 1024 : 2048, isPhone ? 1024 : 2048);
+  sun.shadow.mapSize.set(isPhone ? 1024 : 4096, isPhone ? 1024 : 4096);
   const sc = sun.shadow.camera; sc.left = -200; sc.right = 200; sc.top = 150; sc.bottom = -150; sc.near = 10; sc.far = 800;
   sun.shadow.bias = -0.0006; sun.shadow.normalBias = 0.6;
   scene.add(sun); scene.add(sun.target);
@@ -403,19 +403,93 @@ function mount(container, opts) {
     });
   }
 
+  /* ---------- real surface textures (FlightGear scenery, three.js examples) ----------
+     Loaded in the background; each surface swaps from its painted stand-in to the photo texture. */
+  const TEX_BASE = opts.textures === false ? null : (opts.textures || 'textures/');
+  const texLoader = new T.TextureLoader();
+  const texCache = {};
+  function photo(name, setup) {
+    if (!TEX_BASE) return Promise.reject(new Error('textures off'));
+    if (!texCache[name]) texCache[name] = new Promise((ok, no) => texLoader.load(TEX_BASE + name, t => { if ('colorSpace' in t) t.colorSpace = T.SRGBColorSpace; t.anisotropy = Math.min(16, maxAniso); ok(t); }, undefined, no));
+    return texCache[name].then(t => { const c = t.clone(); c.needsUpdate = true; if (setup) setup(c); return c; });
+  }
+  function usePhoto(mat, name, repX, repY, extra) {
+    photo(name, t => { t.wrapS = t.wrapT = T.RepeatWrapping; t.repeat.set(repX, repY); if (extra) extra(t); })
+      .then(t => { if (!alive.on) return; mat.map = t; mat.color.setHex(0xffffff); mat.needsUpdate = true; }).catch(() => {});
+  }
+  // a quad lying on the ground with explicit UVs: u across (left to right as seen by the pilot), v along the direction of travel
+  function rwQuad(x0, x1, zL, zR, y, dir) {
+    const g = new T.BufferGeometry();
+    const P = dir > 0 ? [x0, y, zL, x0, y, zR, x1, y, zL, x1, y, zR] : [x1, y, zL, x1, y, zR, x0, y, zL, x0, y, zR];
+    g.setAttribute('position', new T.Float32BufferAttribute(P, 3)); g.setAttribute('uv', new T.Float32BufferAttribute([0, 0, 1, 0, 0, 1, 1, 1], 2));
+    g.setAttribute('normal', new T.Float32BufferAttribute([0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0], 3)); g.setIndex([0, 1, 2, 2, 1, 3]);
+    return g;
+  }
+  function runwayTiles(fallback) {
+    // FlightGear tile set: one tile spans the runway width; lengths keep the tile aspect, scaled x3
+    const W = RWY.w, K = 3, len = h => W * (h / 1024) * K;
+    const N = RWY_Z - W / 2, S = RWY_Z + W / 2, y = 0.13;
+    const seq = [['threshold', 256], ['NUM', 128], ['centerline', 256], ['centerline', 256], ['tz_three', 512], ['centerline', 256], ['aim', 512], ['tz_two_a', 512], ['centerline', 256], ['tz_one_a', 512]];
+    const tiles = [];
+    const place = (dir) => {
+      let at = dir > 0 ? RWY.x0 : RWY.x1;
+      seq.forEach(([n, h]) => {
+        const l = len(h), a = dir > 0 ? at : at - l, b = dir > 0 ? at + l : at;
+        const zL = dir > 0 ? N : S, zR = dir > 0 ? S : N;
+        if (n === 'NUM') {
+          const [dl, dr] = dir > 0 ? ['0l', '9r'] : ['2l', '7r'];
+          const zM = RWY_Z; tiles.push([dl, rwQuad(a, b, zL, zM, y, dir)]); tiles.push([dr, rwQuad(a, b, zM, zR, y, dir)]);
+        } else tiles.push([n, rwQuad(a, b, zL, zR, y, dir)]);
+        at += dir * l;
+      });
+      return at;
+    };
+    const e09 = place(1), e27 = place(-1);
+    // centreline between the two marking sets, repeated
+    const midLen = e27 - e09, reps = Math.max(1, Math.round(midLen / len(256)));
+    const mg = rwQuad(e09, e27, N, S, y, 1); mg.attributes.uv.array.forEach((v, i, arr) => { if (i % 2 === 1) arr[i] = v * reps; });
+    tiles.push(['centerline', mg, reps]);
+    const grp = new T.Group(); let loaded = 0;
+    tiles.forEach(([n, geo, r]) => {
+      const m = new T.MeshStandardMaterial({ color: 0xffffff, roughness: 0.86 }); surfMats.push(m);
+      const mesh = new T.Mesh(geo, m); mesh.receiveShadow = true; mesh.visible = false; grp.add(mesh);
+      photo('rw_' + n + '.jpg', t => { t.wrapS = T.ClampToEdgeWrapping; t.wrapT = r ? T.RepeatWrapping : T.ClampToEdgeWrapping; }).then(t => {
+        m.map = t; m.needsUpdate = true; mesh.visible = true;
+        if (++loaded === tiles.length) fallback.visible = false;
+      }).catch(() => {});
+    });
+    world.add(grp);
+    // runway shoulders
+    const sm = new T.MeshStandardMaterial({ color: 0x8d8574, roughness: 0.97 });
+    [N - 1.2, S + 1.2].forEach(z => { const m = new T.Mesh(new T.PlaneGeometry(RWY.x1 - RWY.x0, 2.4), sm); m.rotation.x = -Math.PI / 2; m.position.set((RWY.x0 + RWY.x1) / 2, 0.08, z); m.receiveShadow = true; world.add(m); });
+  }
+
   /* ---------- ground ---------- */
   {
     const g = new T.Mesh(new T.PlaneGeometry(1400, 640), (() => { const t = TEX.grass.clone(); t.needsUpdate = true; t.repeat.set(1400 / 44, 640 / 44); return new T.MeshStandardMaterial({ map: t, roughness: 0.95 }); })());
     g.rotation.x = -Math.PI / 2; g.position.set(0, -0.02, COAST_Z + 2 + 320); g.receiveShadow = true; world.add(g);
+    usePhoto(g.material, 'grass.jpg', 1400 / 30, 640 / 30);
+    g.material.onBeforeCompile = sh => {
+      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vWP;').replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvWP = (modelMatrix * vec4(transformed, 1.0)).xyz;');
+      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nvarying vec3 vWP;\nfloat h2(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }\nfloat vn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f); return mix(mix(h2(i), h2(i + vec2(1, 0)), f.x), mix(h2(i + vec2(0, 1)), h2(i + vec2(1, 1)), f.x), f.y); }')
+        .replace('#include <map_fragment>', `#include <map_fragment>
+          float n = vn(vWP.xz / 60.0) * 0.6 + vn(vWP.xz / 17.0) * 0.4;
+          vec3 dry = vec3(0.78, 0.72, 0.52), lush = vec3(0.66, 0.74, 0.5);
+          float lum = dot(diffuseColor.rgb, vec3(0.3, 0.59, 0.11));
+          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(lum) * vec3(1.18, 1.08, 0.78), 0.55);
+          diffuseColor.rgb *= mix(dry, lush, smoothstep(0.3, 0.9, n)) * (0.92 + 0.16 * vn(vWP.xz / 5.0)) * 1.12;`);
+    };
     surface(TEX.concrete, 196, 40, 0, 0.06, -26, 40);                      // main apron
     surface(TEX.concrete, 48, 54, HANGAR.x, 0.07, -24, 40);                 // hangar apron
     surface(TEX.concrete, 58, 34, -105, 0.07, -27, 40);                     // fleet apron
-    surface(TEX.taxi, 256, 8, -6, 0.09, TWY_Z, 32, 8);                       // taxiway
-    surface(TEX.taxi, 22, 9, -122, 0.1, (RWY_Z + TWY_Z) / 2, 32, 9, Math.PI / 2);
-    surface(TEX.taxi, 22, 9, 96, 0.1, (RWY_Z + TWY_Z) / 2, 32, 9, Math.PI / 2);
+    // taxiways: FlightGear asphalt tile with its yellow centreline running along the taxiway
+    [[256, 8, -6, 0.09, TWY_Z, 0], [22, 9, -122, 0.1, (RWY_Z + TWY_Z) / 2, Math.PI / 2], [22, 9, 96, 0.1, (RWY_Z + TWY_Z) / 2, Math.PI / 2]].forEach(([w, d, x, y, z, r]) => {
+      const m = surface(TEX.taxi, w, d, x, y, z, 32, d, r); usePhoto(m.material, 'taxiway.jpg', d / 8, w / 8, t => { t.center.set(0.5, 0.5); t.rotation = Math.PI / 2; });
+    });
     const rt = runwayTexture(); rt.wrapS = rt.wrapT = T.ClampToEdgeWrapping;
     const rm = new T.MeshStandardMaterial({ map: rt, roughness: 0.82 }); surfMats.push(rm);
     const rw = new T.Mesh(new T.PlaneGeometry(RWY.x1 - RWY.x0, RWY.w), rm); rw.rotation.x = -Math.PI / 2; rw.position.set((RWY.x0 + RWY.x1) / 2, 0.12, RWY_Z); rw.receiveShadow = true; world.add(rw);
+    runwayTiles(rw);
     // stand markings
     AIRPORT_GATES.forEach(g => { world.add(flat(0.35, 22, P.yellow, g.x, 0.15, -36)); world.add(flat(5, 0.35, P.yellow, g.x, 0.15, -18.6)); world.add(flat(16, 0.25, 0xd9473a, g.x, 0.15, -13.2)); });
     [-112, -88].forEach(x => world.add(flat(0.35, 20, P.yellow, x, 0.15, -32)));
@@ -424,8 +498,8 @@ function mount(container, opts) {
     surface(TEX.concrete, 118, 8, 0, 0.07, 22.8, 40, 40, 0, false);
     world.add(box(118, 0.4, 1.2, 0xf0ede6, 0, 0.2, 18.2));
     [[-94, 54], [94, 54]].forEach(([x, z]) => {
-      world.add(flat(72, 22, 0xb2b4b7, x, 0.06, z));
-      for (let i = -6; i <= 6; i++) { world.add(flat(0.2, 7, P.mark, x + i * 5, 0.14, z - 6)); world.add(flat(0.2, 7, P.mark, x + i * 5, 0.14, z + 6)); }
+      const cp = flat(72, 22, 0xb2b4b7, x, 0.06, z); world.add(cp);
+      cp.material = cp.material.clone(); usePhoto(cp.material, 'carpark.jpg', 72 / 40, 22 / 40);
     });
   }
 
@@ -807,7 +881,7 @@ function mount(container, opts) {
       world.add(cyl(0.25, 0.35, 16, P.steel, x, 8, -11, 8));
       const lm = new T.MeshBasicMaterial({ color: 0x8a8a8a }); lampMats.push(lm);
       world.add(mesh(new T.BoxGeometry(3, 0.8, 1.2), lm, x, 16.2, -11, false, false));
-      const gl = glow(0xffe6b0, 14, 0); gl.position.set(x, 16.2, -11.8); world.add(gl); floodGlows.push(gl);
+      const gl = glow(0xffe6b0, 8, 0); gl.position.set(x, 16.2, -11.8); world.add(gl); floodGlows.push(gl);
       lightPool(52, 44, 0xffd9a0, x, -22);
     });
     lightPool(70, 14, 0xffc977, -40, -6); lightPool(70, 14, 0xffc977, 40, -6);
@@ -1304,6 +1378,99 @@ function mount(container, opts) {
     swapIn(g, f.model || f.type);
   });
 
+  function makeWater(geometry, normals) {
+    const mirrorPlane = new T.Plane(), normal = new T.Vector3(), mirrorWorld = new T.Vector3(), camWorld = new T.Vector3(), rot = new T.Matrix4();
+    const lookAt = new T.Vector3(), clip = new T.Vector4(), view = new T.Vector3(), target = new T.Vector3(), q = new T.Vector4();
+    const texMatrix = new T.Matrix4(), mirrorCam = new T.PerspectiveCamera();
+    const size = Math.min(1024, Math.round(1024 * DPR / 1.5));
+    const rt = new T.WebGLRenderTarget(size, size, { type: T.HalfFloatType });
+    const U = T.UniformsUtils.merge([T.UniformsLib.fog, T.UniformsLib.lights, {
+      normalSampler: { value: null }, mirrorSampler: { value: null }, time: { value: 0 }, size: { value: 2.6 }, distortionScale: { value: 3.2 },
+      textureMatrix: { value: new T.Matrix4() }, sunColor: { value: new T.Color(0xffffff) }, sunDirection: { value: new T.Vector3(0.7, 0.7, 0) },
+      eye: { value: new T.Vector3() }, deepColor: { value: new T.Color(0x0a3a5c) }, shallowColor: { value: new T.Color(0x1f9aa6) }, coastZ: { value: COAST_Z - 8 }, glint: { value: 1 }
+    }]);
+    const mat = new T.ShaderMaterial({ uniforms: U, lights: true, fog: true,
+      vertexShader: `uniform mat4 textureMatrix; varying vec4 mirrorCoord; varying vec4 worldPosition;
+        #include <common>
+        #include <fog_pars_vertex>
+        #include <shadowmap_pars_vertex>
+        #include <logdepthbuf_pars_vertex>
+        void main() { mirrorCoord = modelMatrix * vec4(position, 1.0); worldPosition = mirrorCoord.xyzw; mirrorCoord = textureMatrix * mirrorCoord;
+          vec4 mvPosition = modelViewMatrix * vec4(position, 1.0); gl_Position = projectionMatrix * mvPosition;
+          #include <beginnormal_vertex>
+          #include <defaultnormal_vertex>
+          #include <logdepthbuf_vertex>
+          #include <fog_vertex>
+          #include <shadowmap_vertex>
+        }`,
+      fragmentShader: `uniform sampler2D mirrorSampler; uniform float time, size, distortionScale, coastZ, glint; uniform sampler2D normalSampler;
+        uniform vec3 sunColor, sunDirection, eye, deepColor, shallowColor; varying vec4 mirrorCoord; varying vec4 worldPosition;
+        vec4 getNoise(vec2 uv) {
+          vec2 uv0 = (uv / 103.0) + vec2(time / 17.0, time / 29.0), uv1 = uv / 107.0 - vec2(time / -19.0, time / 31.0);
+          vec2 uv2 = uv / vec2(8907.0, 9803.0) + vec2(time / 101.0, time / 97.0), uv3 = uv / vec2(1091.0, 1027.0) - vec2(time / 109.0, time / -113.0);
+          vec4 n = texture2D(normalSampler, uv0) + texture2D(normalSampler, uv1) + texture2D(normalSampler, uv2) + texture2D(normalSampler, uv3);
+          return n * 0.5 - 1.0; }
+        void sunLight(const vec3 sn, const vec3 ed, float shiny, float spec, float diffuse, inout vec3 dc, inout vec3 sc) {
+          vec3 r = normalize(reflect(-sunDirection, sn)); float d = max(0.0, dot(ed, r)); sc += pow(d, shiny) * sunColor * spec; dc += max(dot(sunDirection, sn), 0.0) * sunColor * diffuse; }
+        #include <common>
+        #include <packing>
+        #include <bsdfs>
+        #include <fog_pars_fragment>
+        #include <logdepthbuf_pars_fragment>
+        #include <lights_pars_begin>
+        #include <shadowmap_pars_fragment>
+        #include <shadowmask_pars_fragment>
+        void main() {
+          #include <logdepthbuf_fragment>
+          vec4 noise = getNoise(worldPosition.xz * size);
+          vec3 sn = normalize(noise.xzy * vec3(1.5, 1.0, 1.5));
+          vec3 dl = vec3(0.0), sl = vec3(0.0); vec3 w2e = eye - worldPosition.xyz; vec3 ed = normalize(w2e);
+          sunLight(sn, ed, 140.0, 2.4 * glint, 0.4, dl, sl);
+          float dist = length(w2e); vec2 distortion = sn.xz * (0.001 + 1.0 / dist) * distortionScale;
+          vec3 refl = vec3(texture2D(mirrorSampler, mirrorCoord.xy / mirrorCoord.w + distortion));
+          float theta = max(dot(ed, sn), 0.0); float reflectance = 0.04 + 0.96 * pow(1.0 - theta, 4.0);
+          // shallow turquoise near the beach, deep blue offshore
+          float depth = clamp((coastZ - worldPosition.z) / 70.0, 0.0, 1.0);
+          vec3 waterColor = mix(shallowColor, deepColor, smoothstep(0.0, 1.0, depth));
+          vec3 scatter = max(0.0, dot(sn, ed)) * waterColor;
+          vec3 albedo = mix((sunColor * dl * 0.12 + scatter * 1.35) * getShadowMask(), (refl * mix(vec3(1.0), waterColor * 3.0, 0.35) + refl * sl), reflectance * 0.8);
+          albedo += sl * 0.6;
+          // surf line along the beach
+          float surf = smoothstep(0.0, 1.0, 1.0 - clamp((coastZ - worldPosition.z) / 3.5, 0.0, 1.0)) * (0.55 + 0.45 * sin(worldPosition.x * 0.35 + time * 1.7 + noise.x * 2.0));
+          albedo = mix(albedo, vec3(0.92, 0.95, 0.96), clamp(surf, 0.0, 1.0) * 0.55);
+          gl_FragColor = vec4(albedo, 1.0);
+          #include <tonemapping_fragment>
+          #include <colorspace_fragment>
+          #include <fog_fragment>
+        }` });
+    mat.uniforms.mirrorSampler.value = rt.texture; mat.uniforms.textureMatrix.value = texMatrix; mat.uniforms.normalSampler.value = normals;
+    const mesh = new T.Mesh(geometry, mat); mesh.receiveShadow = true;
+    mesh.onBeforeRender = (renderer, scene, camera) => {
+      if (camera === mirrorCam) return;
+      mirrorWorld.setFromMatrixPosition(mesh.matrixWorld); camWorld.setFromMatrixPosition(camera.matrixWorld);
+      rot.extractRotation(mesh.matrixWorld); normal.set(0, 0, 1).applyMatrix4(rot);
+      view.subVectors(mirrorWorld, camWorld); if (view.dot(normal) > 0) return;
+      view.reflect(normal).negate().add(mirrorWorld);
+      rot.extractRotation(camera.matrixWorld); lookAt.set(0, 0, -1).applyMatrix4(rot).add(camWorld);
+      target.subVectors(mirrorWorld, lookAt).reflect(normal).negate().add(mirrorWorld);
+      mirrorCam.position.copy(view); mirrorCam.up.set(0, 1, 0).applyMatrix4(rot).reflect(normal); mirrorCam.lookAt(target);
+      mirrorCam.far = camera.far; mirrorCam.updateMatrixWorld(); mirrorCam.projectionMatrix.copy(camera.projectionMatrix);
+      texMatrix.set(0.5, 0, 0, 0.5, 0, 0.5, 0, 0.5, 0, 0, 0.5, 0.5, 0, 0, 0, 1); texMatrix.multiply(mirrorCam.projectionMatrix).multiply(mirrorCam.matrixWorldInverse);
+      mirrorPlane.setFromNormalAndCoplanarPoint(normal, mirrorWorld).applyMatrix4(mirrorCam.matrixWorldInverse);
+      clip.set(mirrorPlane.normal.x, mirrorPlane.normal.y, mirrorPlane.normal.z, mirrorPlane.constant);
+      const pm = mirrorCam.projectionMatrix.elements;
+      q.x = (Math.sign(clip.x) + pm[8]) / pm[0]; q.y = (Math.sign(clip.y) + pm[9]) / pm[5]; q.z = -1; q.w = (1 + pm[10]) / pm[14];
+      clip.multiplyScalar(2 / clip.dot(q)); pm[2] = clip.x; pm[6] = clip.y; pm[10] = clip.z + 1; pm[14] = clip.w;
+      mat.uniforms.eye.value.setFromMatrixPosition(camera.matrixWorld);
+      const cur = renderer.getRenderTarget(), sAuto = renderer.shadowMap.autoUpdate;
+      mesh.visible = false; renderer.shadowMap.autoUpdate = false; renderer.setRenderTarget(rt);
+      renderer.state.buffers.depth.setMask(true); if (renderer.autoClear === false) renderer.clear();
+      renderer.render(scene, mirrorCam);
+      mesh.visible = true; renderer.shadowMap.autoUpdate = sAuto; renderer.setRenderTarget(cur);
+    };
+    mesh.userData.rt = rt; return mesh;
+  }
+
   /* ================================================== THE COAST
      The Med sits north of the runway: beach, sea, a quay with the port
      office (ship team) and the rescue vessel alongside. Launches bring the
@@ -1311,7 +1478,7 @@ function mount(container, opts) {
   const QUAY = { x0: 38, x1: 124, z0: COAST_Z - 0, z1: -119, top: 0.6 };
   const SHIP_POS = { x: 72, z: -121.9 };
   const PORT = { x0: 102, x1: 120, z0: -101.5, z1: -115 };
-  let seaMat, foam, shipObj = null, lighthouseBeam;
+  let seaMat, foam, shipObj = null, lighthouseBeam, water = null;
   const seaGlows = [];
   {
     // sea normal map: tiling sine ripples turned into normals
@@ -1326,6 +1493,12 @@ function mount(container, opts) {
     const nt = new T.CanvasTexture(c); nt.wrapS = nt.wrapT = T.RepeatWrapping; nt.repeat.set(1600 / 64, 900 / 64);
     seaMat = new T.MeshStandardMaterial({ color: 0x2a5f7a, roughness: 0.2, metalness: 0.08, normalMap: nt, normalScale: new T.Vector2(0.35, 0.35) });
     const sea = new T.Mesh(new T.PlaneGeometry(1600, 900), seaMat); sea.rotation.x = -Math.PI / 2; sea.position.set(0, SEA_Y, COAST_Z - 450); sea.receiveShadow = true; world.add(sea);
+    // reflective water (desktop): planar mirror + animated normals, adapted from three.js examples/jsm/objects/Water.js (MIT)
+    if (!isPhone && opts.water !== false) photo('waternormals.jpg', t => { t.wrapS = t.wrapT = T.RepeatWrapping; }).then(nt => {
+      if (!alive.on) return;
+      water = makeWater(new T.PlaneGeometry(1600, 900), nt);
+      water.rotation.x = -Math.PI / 2; water.position.set(0, SEA_Y + 0.01, COAST_Z - 450); world.add(water); sea.visible = false;
+    }).catch(() => {});
     // beach and surf
     const st = TEX.sand.clone(); st.needsUpdate = true; st.repeat.set(1400 / 30, 12 / 30);
     const beach = new T.Mesh(new T.PlaneGeometry(1400, 12), new T.MeshStandardMaterial({ map: st, roughness: 0.95 })); beach.rotation.x = -Math.PI / 2; beach.position.set(0, 0.0, COAST_Z - 2); beach.receiveShadow = true; world.add(beach);
@@ -1335,7 +1508,7 @@ function mount(container, opts) {
     surface(TEX.concrete, QUAY.x1 - QUAY.x0, QUAY.z0 - QUAY.z1 + 4, (QUAY.x0 + QUAY.x1) / 2, QUAY.top + 0.01, (QUAY.z0 + QUAY.z1) / 2 + 2, 30, 30, 0, false);
     world.add(flat(QUAY.x1 - QUAY.x0, 0.35, 0xf2c14e, (QUAY.x0 + QUAY.x1) / 2, QUAY.top + 0.06, QUAY.z1 + 1.2));
     for (let xx = QUAY.x0 + 3; xx < QUAY.x1; xx += 6) { world.add(cyl(0.28, 0.34, 0.6, 0x3a3f46, xx, QUAY.top + 0.3, QUAY.z1 + 0.6, 10)); world.add(box(1.6, 1.4, 0.5, 0x2d2f33, xx + 3, QUAY.top - 0.9, QUAY.z1 - 0.2)); }
-    [46, 96, 122].forEach(xx => { world.add(cyl(0.18, 0.24, 9, P.steel, xx, QUAY.top + 4.5, QUAY.z1 + 2.2, 8)); const gl = glow(0xffe6b0, 8, 0); gl.position.set(xx, QUAY.top + 9, QUAY.z1 + 2.2); world.add(gl); floodGlows.push(gl); lightPool(22, 18, 0xffd9a0, xx, QUAY.z1 + 5, QUAY.top + 0.08); });
+    [46, 96, 122].forEach(xx => { world.add(cyl(0.18, 0.24, 9, P.steel, xx, QUAY.top + 4.5, QUAY.z1 + 2.2, 8)); const gl = glow(0xffe6b0, 5, 0); gl.position.set(xx, QUAY.top + 9, QUAY.z1 + 2.2); world.add(gl); floodGlows.push(gl); lightPool(22, 18, 0xffd9a0, xx, QUAY.z1 + 5, QUAY.top + 0.08); });
     // port crane over the ship
     const cr = new T.Group(); cr.position.set(90, QUAY.top, -108);
     cr.add(box(2.4, 1.2, 2.4, 0x3e6a93, 0, 0.6, 0)); cr.add(cyl(0.5, 0.6, 9, 0xe3a23b, 0, 5.4, 0, 10)); cr.add(box(2.2, 2.0, 2.4, 0xe3a23b, 0, 10.6, 0));
@@ -1753,9 +1926,9 @@ function mount(container, opts) {
   const stars = (() => { const n = 900, a = new Float32Array(n * 3); for (let i = 0; i < n; i++) { const th = Math.random() * Math.PI * 2, ph = Math.random() * Math.PI * 0.45; a.set([Math.cos(th) * Math.sin(ph) * 1400, Math.cos(ph) * 1400 + 100, Math.sin(th) * Math.sin(ph) * 1400], i * 3); } const g = new T.BufferGeometry(); g.setAttribute('position', new T.BufferAttribute(a, 3)); const p = new T.Points(g, new T.PointsMaterial({ color: 0xffffff, size: 2.2, sizeAttenuation: false, transparent: true, opacity: 0 })); scene.add(p); return p; })();
   const dust = (() => { const n = 1400, a = new Float32Array(n * 3); for (let i = 0; i < n; i++) a.set([(Math.random() - 0.5) * 420, Math.random() * 50, (Math.random() - 0.5) * 320], i * 3); const g = new T.BufferGeometry(); g.setAttribute('position', new T.BufferAttribute(a, 3)); const p = new T.Points(g, new T.PointsMaterial({ color: 0xe0a066, size: 0.9, transparent: true, opacity: 0.6 })); p.visible = false; scene.add(p); return p; })();
   const SKY = {
-    day:   { bg: 0xe3ebf0, hs: 0xf4f7fb, hg: 0xa3ab98, hi: 0.5, sun: 0xfff7ee, si: 0.78, fn: 380, ff: 900 },
+    day:   { bg: 0xd3e2ee, hs: 0xf4f7fb, hg: 0xa3ab98, hi: 0.5, sun: 0xfff7ee, si: 0.78, fn: 380, ff: 900 },
     dusk:  { bg: 0xf2c9ab, hs: 0xffd6b0, hg: 0x8a7f86, hi: 0.45, sun: 0xff9a5a, si: 0.7, fn: 320, ff: 850 },
-    night: { bg: 0x101a2b, hs: 0x5a6f9a, hg: 0x1b2230, hi: 0.42, sun: 0xa9bcff, si: 0.32, fn: 300, ff: 900 }
+    night: { bg: 0x0b1424, hs: 0x34466a, hg: 0x10141c, hi: 0.22, sun: 0x8fa3dc, si: 0.12, fn: 300, ff: 900 }
   };
   const WX = { clear: { fog: 1, tint: null, wet: 0, sun: 1 }, rain: { fog: 0.55, tint: 0xaab4bf, wet: 1, sun: 0.45 }, fog: { fog: 0.16, tint: 0xd5dade, wet: 0.3, sun: 0.5 }, calima: { fog: 0.34, tint: 0xe2b27c, wet: 0, sun: 0.7 }, storm: { fog: 0.4, tint: 0x6f7a88, wet: 1, sun: 0.35 } };
   const c1 = new T.Color(), c2 = new T.Color(), c3 = new T.Color();
@@ -1785,6 +1958,7 @@ function mount(container, opts) {
     const ang = ((clamp(h, 6, 21) - 6) / 15) * Math.PI;
     sun.position.set(Math.cos(ang) * 260 + 30, 160 + Math.sin(ang) * 140, 150); sun.target.position.set(0, 0, -15);
     flash.intensity = ENV.lightning * 3 * LS;
+    renderer.toneMappingExposure = lerp(1.12, 0.9, k);
     windowMats.forEach(m => m.emissiveIntensity = k * 1.1);
     edgeMats.forEach(e => { e.m.color.setHex(e.c).multiplyScalar(0.35 + k * 0.9); });
     approachGlows.forEach((s, i) => s.material.opacity = k * (((SIM.t * 2 - i * 0.12) % 1) < 0.15 ? 1 : 0.3));
@@ -1792,20 +1966,27 @@ function mount(container, opts) {
     beaconM.color.setHex(k > 0.45 ? ((SIM.t % 1.4) < 0.7 ? 0xff453a : 0x5a1a14) : 0xb23a2a);
     floodGlows.forEach(g => g.material.opacity = k * 0.8);
     beam.material.opacity = 0.04 + k * 0.07;
-    pools.forEach(m => m.material.opacity = k * 0.5);
+    pools.forEach(m => m.material.opacity = k * 0.32);
     if (edgeGlow) edgeGlow.material.opacity = clamp(k * 1.3 - 0.15, 0, 1);
     stars.material.opacity = clamp(k * 1.2 - 0.2, 0, 1) * (ENV.weather === 'clear' ? 1 : 0.1);
     rain.visible = ENV.weather === 'rain' || ENV.weather === 'storm'; dust.visible = ENV.weather === 'calima';
     surfMats.forEach(m => { m.roughness = lerp(0.86, 0.2, wx.wet); m.metalness = wx.wet * 0.15; });
     // sky dome: zenith colour by time of day, horizon = fog colour, sun glow
-    c1.setHex(0x6fa3d8).lerp(c2.setHex(0x050a16), k); c1.lerp(c3.setHex(0x5a6ea8), dusk * 0.5);
+    c1.setHex(0x3b7fd0).lerp(c2.setHex(0x040812), k); c1.lerp(c3.setHex(0x5a6ea8), dusk * 0.5);
     if (wx.tint) c1.lerp(c2.setHex(wx.tint).multiplyScalar(1 - k * 0.8), 0.7);
     skyU.top.value.copy(c1); skyU.mid.value.copy(bg); skyU.sunDir.value.copy(sun.position).normalize();
     skyU.sunCol.value.copy(sun.color); updateEnvMap(k, ENV.weather, c1, bg); skyU.glowK.value = (1 - k * 0.85) * (ENV.weather === 'clear' ? 1 : 0.3);
-    clouds.mat.color.setHex(0xffffff).lerp(c2.setHex(0x2c3550), k * 0.85); if (wx.tint) clouds.mat.color.lerp(c2.setHex(wx.tint), 0.5);
+    clouds.mat.color.setHex(0xffffff).lerp(c2.setHex(0x161c2c), k * 0.95); if (wx.tint) clouds.mat.color.lerp(c2.setHex(wx.tint), 0.5);
     hillMat.color.setHex(0x9db08f).lerp(c2.setHex(0x1c2433), k * 0.6);
     seaMat.color.setHex(0x2a5f7a).lerp(c2.setHex(0x0a1626), k * 0.92); if (wx.tint) seaMat.color.lerp(c2.setHex(wx.tint).multiplyScalar(0.55), 0.35);
     seaMat.normalScale.setScalar(ENV.weather === 'storm' ? 0.9 : ENV.weather === 'rain' ? 0.55 : 0.35);
+    if (water) {
+      const wu = water.material.uniforms;
+      wu.sunDirection.value.copy(sun.position).normalize(); wu.sunColor.value.copy(sun.color).multiplyScalar(1 - k * 0.7);
+      wu.deepColor.value.setHex(0x0a3a5c).lerp(c2.setHex(0x01050c), k * 0.94); wu.shallowColor.value.setHex(0x1f9aa6).lerp(c2.setHex(0x04101a), k * 0.94);
+      if (wx.tint) { wu.deepColor.value.lerp(c2.setHex(wx.tint).multiplyScalar(0.4), 0.35); wu.shallowColor.value.lerp(c2.setHex(wx.tint).multiplyScalar(0.5), 0.35); }
+      wu.glint.value = (ENV.weather === 'clear' ? 1 : 0.25) * (1 - k * 0.5); wu.distortionScale.value = ENV.weather === 'storm' ? 6 : 3.2;
+    }
     brainHalo.material.opacity = 0.3 + k * 0.2 + ENV.brainPulse * 0.4;
   }
 
@@ -2017,16 +2198,53 @@ function mount(container, opts) {
   const minFrame = isPhone ? 1 / 30 : 0;
   const onVis = () => { hidden = document.hidden; if (!hidden) { last = performance.now(); raf = raf || requestAnimationFrame(frame); } };
   document.addEventListener('visibilitychange', onVis);
+  /* ---------- post: HDR render, bloom, then ACES tone mapping (desktop, WebGL2) ---------- */
+  const POST = (!isPhone && opts.bloom !== false && renderer.capabilities.isWebGL2) ? (() => {
+    const mk = (s = 0) => new T.WebGLRenderTarget(1, 1, { type: T.HalfFloatType, samples: s });
+    const rtScene = mk(4), levels = [0, 1, 2, 3].map(() => [mk(), mk()]);
+    const cam = new T.OrthographicCamera(-1, 1, 1, -1, 0, 1), quad = new T.Mesh(new T.PlaneGeometry(2, 2)), qs = new T.Scene(); qs.add(quad);
+    const VS = 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }';
+    const bright = new T.ShaderMaterial({ uniforms: { tDiffuse: { value: null }, threshold: { value: 1.2 } }, vertexShader: VS, depthTest: false, depthWrite: false,
+      fragmentShader: 'uniform sampler2D tDiffuse; uniform float threshold; varying vec2 vUv; void main(){ vec3 c = texture2D(tDiffuse, vUv).rgb; float l = max(max(c.r, c.g), c.b); gl_FragColor = vec4(c * smoothstep(threshold, threshold * 1.6, l), 1.0); }' });
+    const blur = new T.ShaderMaterial({ uniforms: { tDiffuse: { value: null }, dir: { value: new T.Vector2() } }, vertexShader: VS, depthTest: false, depthWrite: false,
+      fragmentShader: 'uniform sampler2D tDiffuse; uniform vec2 dir; varying vec2 vUv; void main(){ vec3 c = texture2D(tDiffuse, vUv).rgb * 0.227027; c += (texture2D(tDiffuse, vUv + dir * 1.3846).rgb + texture2D(tDiffuse, vUv - dir * 1.3846).rgb) * 0.316216; c += (texture2D(tDiffuse, vUv + dir * 3.2308).rgb + texture2D(tDiffuse, vUv - dir * 3.2308).rgb) * 0.070270; gl_FragColor = vec4(c, 1.0); }' });
+    const comp = new T.ShaderMaterial({ uniforms: { tScene: { value: null }, b0: { value: null }, b1: { value: null }, b2: { value: null }, b3: { value: null }, strength: { value: 0.3 }, vignette: { value: 0.18 } },
+      vertexShader: VS, depthTest: false, depthWrite: false,
+      fragmentShader: `uniform sampler2D tScene, b0, b1, b2, b3; uniform float strength, vignette; varying vec2 vUv;
+        void main(){ vec3 c = texture2D(tScene, vUv).rgb; vec3 b = texture2D(b0, vUv).rgb * 0.6 + texture2D(b1, vUv).rgb * 0.8 + texture2D(b2, vUv).rgb + texture2D(b3, vUv).rgb * 1.2;
+          c += b * strength; vec2 d = vUv - 0.5; c *= 1.0 - vignette * dot(d, d) * 2.2; gl_FragColor = vec4(c, 1.0);
+          #include <tonemapping_fragment>
+          #include <colorspace_fragment>
+        }` });
+    const pass = (m, target) => { quad.material = m; renderer.setRenderTarget(target); renderer.render(qs, cam); };
+    return {
+      setSize(w, h) { rtScene.setSize(w, h); levels.forEach((l, i) => { const f = 2 << i; l[0].setSize(Math.max(1, w / f | 0), Math.max(1, h / f | 0)); l[1].setSize(Math.max(1, w / f | 0), Math.max(1, h / f | 0)); }); },
+      render(night) {
+        renderer.setRenderTarget(rtScene); renderer.render(scene, camera);
+        bright.uniforms.threshold.value = lerp(2.2, 1.5, night); bright.uniforms.tDiffuse.value = rtScene.texture; pass(bright, levels[0][0]);
+        let src = levels[0][0];
+        levels.forEach((l, i) => {
+          if (i) { blur.uniforms.tDiffuse.value = src.texture; blur.uniforms.dir.value.set(0, 0); pass(blur, l[0]); }
+          blur.uniforms.tDiffuse.value = l[0].texture; blur.uniforms.dir.value.set(1 / l[0].width, 0); pass(blur, l[1]);
+          blur.uniforms.tDiffuse.value = l[1].texture; blur.uniforms.dir.value.set(0, 1 / l[0].height); pass(blur, l[0]);
+          src = l[0];
+        });
+        comp.uniforms.tScene.value = rtScene.texture; levels.forEach((l, i) => comp.uniforms['b' + i].value = l[0].texture);
+        comp.uniforms.strength.value = lerp(0.16, 0.38, night); pass(comp, null);
+      },
+      dispose() { rtScene.dispose(); levels.forEach(l => l.forEach(r => r.dispose())); }
+    };
+  })() : null;
   function resize() {
     const w = canvas.clientWidth, h = canvas.clientHeight;
     if (!w || !h) return;
-    if (canvas.width !== Math.floor(w * DPR) || canvas.height !== Math.floor(h * DPR)) { renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); BR.u.uPx.value = h * DPR / (2 * Math.tan(camera.fov * Math.PI / 360)) * BRAIN_S; }
+    if (canvas.width !== Math.floor(w * DPR) || canvas.height !== Math.floor(h * DPR)) { renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); if (POST) POST.setSize(Math.floor(w * DPR), Math.floor(h * DPR)); BR.u.uPx.value = h * DPR / (2 * Math.tan(camera.fov * Math.PI / 360)) * BRAIN_S; }
   }
   function frame(now) {
     raf = 0;
     if (!alive.on || hidden) return;
     raf = requestAnimationFrame(frame);
-    const raw = Math.min(0.06, (now - last) / 1000);
+    const raw = Math.min(0.06, (now - last) / 1000), realDt = Math.min(0.5, (now - (frame.lastReal || now)) / 1000); frame.lastReal = now;
     frameAcc += raw; if (frameAcc < minFrame) return;
     const rawDt = Math.min(0.06, frameAcc); frameAcc = 0; last = now;
     const dt = rawDt * SIM.speed; SIM.t += dt;
@@ -2045,7 +2263,8 @@ function mount(container, opts) {
     });
     // sea life: ripples, surf, buoys, the vessel riding at the quay, lighthouse sweep
     seaMat.normalMap.offset.x += dt * 0.004; seaMat.normalMap.offset.y += dt * 0.0025;
-    foam.material.opacity = 0.3 + 0.25 * Math.sin(SIM.t * 0.8);
+    if (water) water.material.uniforms.time.value += dt * (ENV.weather === 'storm' ? 1.4 : 0.75);
+    foam.material.opacity = water ? 0 : 0.3 + 0.25 * Math.sin(SIM.t * 0.8);
     seaGlows.forEach(o => { if (o.gl) o.gl.material.opacity = ENV.night * (((SIM.t * 0.5 + o.ph) % 2) < 0.35 ? 1 : 0.12); if (o.buoy) { o.buoy.position.y = SEA_Y + Math.sin(SIM.t * 1.3 + o.buoy.userData.bob) * 0.14; o.buoy.rotation.z = Math.sin(SIM.t + o.buoy.userData.bob) * 0.08; } });
     { const sh = shipObj.children[0]; sh.position.y = Math.sin(SIM.t * 0.6) * 0.07; sh.rotation.x = Math.sin(SIM.t * 0.45) * 0.01; sh.rotation.z = Math.sin(SIM.t * 0.33) * 0.004; sh.userData.lights.forEach(l => l.material.opacity = ENV.night * 0.9); }
     lighthouseBeam.rotation.y = SIM.t * 0.6; lighthouseBeam.material.opacity = ENV.night * 0.35;
@@ -2094,7 +2313,7 @@ function mount(container, opts) {
     if (ENV.weather === 'storm' && Math.random() < dt * 0.15) ENV.lightning = 1;
     ENV.lightning = Math.max(0, ENV.lightning - dt * 4);
     sock.rotation.y = Math.sin(tt * 0.7) * 0.25 + (ENV.weather === 'storm' ? 0.6 : 0);
-    updateEnv(rawDt);
+    updateEnv(Math.max(rawDt, realDt));
     if (SEL && ['flight', 'agent', 'vehicle', 'fleet'].includes(SEL.kind)) {
       const o = objFor(SEL); if (o) { o.getWorldPosition(_np); selRing.position.set(_np.x, Math.max(0.3, _np.y + 0.25), _np.z); selRing.material.opacity = 0.55 + Math.sin(tt * 5) * 0.35; } else selRing.visible = false;
     }
@@ -2102,7 +2321,7 @@ function mount(container, opts) {
     signs.forEach(sg => { sg.getWorldPosition(_np); const d = _np.distanceTo(camera.position); sg.material.opacity = clamp((d - 24) / 20, 0, 1); sg.visible = sg.material.opacity > 0.02; });
     boardClock -= rawDt; if (boardClock <= 0) { boardClock = 30; updateBoards(); }
     updateCam(rawDt);
-    renderer.render(scene, camera);
+    if (POST) POST.render(ENV.night); else renderer.render(scene, camera);
     UI && UI.frame(rawDt);
   }
   if (!reduced) { CAM.target.set(-30, 0, -40); CAM.dist = 900; CAM.az = -1.7; CAM.pol = 0.62; const a = AREAS.overview; flyTo(V(...a.t), a.d, a.az, a.pol, 4200, null); }
@@ -2117,7 +2336,7 @@ function mount(container, opts) {
   }
 
   return {
-    flyArea, select, clearSel, objFor, AREAS, SIM, ENV, CAM, people, fleet: fleetObjs, setGraph, onAgents, startSweep, dispose, tour, TOUR, updateBoards, craft, ship: SHIP,
+    flyArea, select, clearSel, objFor, AREAS, SIM, ENV, CAM, people, fleet: fleetObjs, setGraph, onAgents, startSweep, dispose, tour, TOUR, updateBoards, craft, ship: SHIP, scene, renderer, hemi, sun,
     brainInfo: () => ({ nodes: BR.centers.length, links: BR.edgeCount || 0, hot: BR.centers.filter(c => c.node.hot).length }),
     vanInfo: () => van,
     vehicleOf: id => SIM.vehicles.find(v => v.id === id),
