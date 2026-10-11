@@ -17,6 +17,8 @@
 | Tower and floating brain | `ops_graph` nodes, clustered by type: cards front left, parties front right, notes on top, documents back left, people back right. `hot` nodes pulse. Edges are the faint lines |
 | Radar and the blue van | Jarvis. While `jarvis.state === "working"` the radar spins fast, rings go out over the field and the van drives the apron. Gate A walks to the brain when a sweep starts |
 | Fleet stands | `opts.fleet` (your two aircraft) |
+| Split-flap boards on the terminal roof | Departures from `departures[]` (Boarding when due within 3 h, Overdue in red), Arrivals from `arrivals[]` or the latest `feed[]` rows. Click a board to open its list |
+| Tour button | a slow cinematic glide: brain, a moving flight, the gates, a turnaround, the workshop, the fleet, the boards, then the overview. Any touch stops it |
 | Clocks | Madrid large, the Mac's local zone if different, then `clocks.zones`, then the countdown to `next_run_at` |
 | Usage rings | `usage.five_hour` and `usage.seven_day`, with a tick at `usage.cap` |
 | Tabs | Team, Arrivals, Departures (`departures[]` with `due`), Messages (`feed[]`) |

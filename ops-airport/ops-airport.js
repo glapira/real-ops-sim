@@ -38,7 +38,7 @@ const STR = {
     auto: 'Auto', day: 'Day', night: 'Night', clear: 'Clear', rain: 'Rain', fog: 'Fog', calima: 'Calima', storm: 'Storm',
     steps: ['On block', 'Read', 'Check', 'Book', 'File', 'Pushback'],
     turnaround: 'Turnaround', model: 'Model', state: 'State', task: 'Now', last: 'Last', schedule: 'Shift',
-    open: 'Open', close: 'Close', gate: 'Gate', stand: 'Stand', status: 'Status', from: 'Agent',
+    open: 'Open', close: 'Close', tour: 'Tour', gate: 'Gate', stand: 'Stand', status: 'Status', from: 'Agent',
     brainTitle: 'Jarvis brain', brainSub: 'Cards, people, notes and documents the agents read', nodes: 'nodes', links: 'links', hot: 'touched in the last 3 h',
     sweepNow: 'Jarvis is sweeping', sweepIdle: 'Radar idle', list: 'List', reset: 'Reset view',
     flight: 'Flight', aircraft: 'Aircraft', vehicle: 'Vehicle', at: 'Time', due: 'Due', sample: 'Sample',
@@ -58,7 +58,7 @@ const STR = {
     auto: 'Auto', day: 'Día', night: 'Noche', clear: 'Despejado', rain: 'Lluvia', fog: 'Niebla', calima: 'Calima', storm: 'Tormenta',
     steps: ['En calzos', 'Leído', 'Revisión', 'Asiento', 'Archivo', 'Remolque'],
     turnaround: 'Escala', model: 'Modelo', state: 'Estado', task: 'Ahora', last: 'Último', schedule: 'Turno',
-    open: 'Abrir', close: 'Cerrar', gate: 'Puerta', stand: 'Puesto', status: 'Estado', from: 'Agente',
+    open: 'Abrir', close: 'Cerrar', tour: 'Recorrido', gate: 'Puerta', stand: 'Puesto', status: 'Estado', from: 'Agente',
     brainTitle: 'Cerebro de Jarvis', brainSub: 'Fichas, personas, notas y documentos que leen los agentes', nodes: 'nodos', links: 'enlaces', hot: 'tocados en las últimas 3 h',
     sweepNow: 'Jarvis está barriendo', sweepIdle: 'Radar en espera', list: 'Lista', reset: 'Restablecer vista',
     flight: 'Vuelo', aircraft: 'Avión', vehicle: 'Vehículo', at: 'Hora', due: 'Vence', sample: 'Ejemplo',
@@ -180,7 +180,7 @@ function mount(container, opts) {
   const host = document.createElement('div');
   host.className = 'oa';
   host.setAttribute('data-oa-theme', resolveTheme(opts.theme));
-  host.innerHTML = `<canvas class="oa-canvas" aria-label="${L.title}"></canvas><div class="oa-ui"></div><div class="oa-tip" hidden></div>`;
+  host.innerHTML = `<canvas class="oa-canvas" aria-label="${L.title}"></canvas><div class="oa-vignette" aria-hidden="true"></div><div class="oa-ui"></div><div class="oa-tip" hidden></div>`;
   container.appendChild(host);
   const canvas = host.querySelector('canvas');
   const uiRoot = host.querySelector('.oa-ui');
@@ -215,6 +215,7 @@ function mount(container, opts) {
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = T.PCFSoftShadowMap;
   if ('outputColorSpace' in renderer) renderer.outputColorSpace = T.SRGBColorSpace;
+  renderer.toneMapping = T.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.12;
   disposables.push(renderer);
 
   const scene = new T.Scene();
@@ -292,33 +293,156 @@ function mount(container, opts) {
   const TOWER = { x: 0, z: 6 };
   const world = new T.Group(); scene.add(world);
 
+  /* ---------- painted surfaces (canvas textures) ---------- */
+  const maxAniso = renderer.capabilities.getMaxAnisotropy ? renderer.capabilities.getMaxAnisotropy() : 1;
+  const texScale = isPhone ? 0.5 : 1;
+  function canvasTex(w, h, draw) {
+    const c = document.createElement('canvas'); c.width = Math.round(w * texScale); c.height = Math.round(h * texScale);
+    const x = c.getContext('2d'); x.scale(texScale, texScale); draw(x, w, h);
+    const t = new T.CanvasTexture(c); if ('colorSpace' in t) t.colorSpace = T.SRGBColorSpace;
+    t.wrapS = t.wrapT = T.RepeatWrapping; t.anisotropy = Math.min(8, maxAniso); return t;
+  }
+  function speckle(x, w, h, n, colors, alpha, size = 2) {
+    for (let i = 0; i < n; i++) { x.globalAlpha = alpha * (0.3 + Math.random() * 0.7); x.fillStyle = colors[i % colors.length]; const s = 0.6 + Math.random() * size; x.fillRect(Math.random() * w, Math.random() * h, s, s); }
+    x.globalAlpha = 1;
+  }
+  // a flat ground plane that tiles its texture every `tile` world units
+  const surfMats = [];
+  function surface(tex, w, d, x, y, z, tileW, tileD, rotY = 0, wet = true) {
+    const t = tex.clone(); t.needsUpdate = true; t.repeat.set(w / tileW, d / (tileD || tileW));
+    const m = new T.MeshStandardMaterial({ map: t, roughness: 0.86, metalness: 0 });
+    if (wet) surfMats.push(m);
+    const o = new T.Mesh(new T.PlaneGeometry(w, d), m); o.rotation.x = -Math.PI / 2; o.rotation.z = rotY; o.position.set(x, y, z); o.receiveShadow = true;
+    world.add(o); return o;
+  }
+  const TEX = {
+    grass: canvasTex(256, 256, (x, w, h) => {
+      x.fillStyle = '#a9c288'; x.fillRect(0, 0, w, h);
+      x.fillStyle = 'rgba(255,255,255,0.035)'; x.fillRect(0, 0, w / 2, h);           // mowing stripes
+      speckle(x, w, h, 2600, ['#94ad76', '#bcd09d', '#a2bb80', '#86a06a'], 0.55, 2.2);
+    }),
+    concrete: canvasTex(512, 512, (x, w, h) => {
+      x.fillStyle = '#d6d3cc'; x.fillRect(0, 0, w, h);
+      const n = 8, sz = w / n;
+      for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) { const v = Math.floor(Math.random() * 10 - 5); x.fillStyle = `rgb(${214 + v},${211 + v},${204 + v})`; x.fillRect(i * sz, j * sz, sz, sz); }
+      speckle(x, w, h, 5000, ['#c4c0b8', '#e2dfd9', '#b9b5ad'], 0.5, 1.6);
+      x.globalAlpha = 0.08; x.fillStyle = '#5a5248';
+      for (let i = 0; i < 9; i++) { x.beginPath(); x.ellipse(Math.random() * w, Math.random() * h, 10 + Math.random() * 30, 6 + Math.random() * 16, Math.random() * 3, 0, Math.PI * 2); x.fill(); }
+      x.globalAlpha = 1; x.strokeStyle = 'rgba(120,112,100,0.45)'; x.lineWidth = 1.4;
+      for (let i = 0; i <= n; i++) { x.beginPath(); x.moveTo(i * sz, 0); x.lineTo(i * sz, h); x.stroke(); x.beginPath(); x.moveTo(0, i * sz); x.lineTo(w, i * sz); x.stroke(); }
+    }),
+    taxi: canvasTex(256, 64, (x, w, h) => {
+      x.fillStyle = '#7d8086'; x.fillRect(0, 0, w, h);
+      speckle(x, w, h, 1800, ['#6d7076', '#8f9298', '#5f6268'], 0.6, 1.4);
+      x.fillStyle = '#f2c14e'; x.fillRect(0, h / 2 - 1.5, w, 3);                       // centreline
+      x.fillStyle = 'rgba(242,193,78,0.9)'; x.fillRect(0, 3, w, 1.5); x.fillRect(0, h - 4.5, w, 1.5);   // edge lines
+    }),
+    road: canvasTex(256, 64, (x, w, h) => {
+      x.fillStyle = '#6f7277'; x.fillRect(0, 0, w, h);
+      speckle(x, w, h, 1600, ['#62656a', '#7e8186', '#55585d'], 0.6, 1.4);
+      x.fillStyle = '#f2f0ea'; for (let i = 0; i < w; i += 64) x.fillRect(i, h / 2 - 1, 34, 2);
+      x.fillRect(0, 4, w, 1.4); x.fillRect(0, h - 5.4, w, 1.4);
+    }),
+    floor: canvasTex(256, 256, (x, w, h) => {
+      x.fillStyle = '#f1ece3'; x.fillRect(0, 0, w, h);
+      speckle(x, w, h, 2500, ['#e3dccf', '#faf7f1', '#d9d0c1', '#c9bfae'], 0.6, 1.5);
+      x.strokeStyle = 'rgba(160,148,130,0.25)'; x.lineWidth = 1; for (let i = 0; i <= 4; i++) { x.beginPath(); x.moveTo(i * 64, 0); x.lineTo(i * 64, h); x.stroke(); x.beginPath(); x.moveTo(0, i * 64); x.lineTo(w, i * 64); x.stroke(); }
+    })
+  };
+  // the runway is painted as one long texture: asphalt, edge and centre lines,
+  // threshold piano keys, designators, touchdown zone and aiming point marks
+  const RWY = { x0: -158, x1: 138, w: 12 };
+  function runwayTexture() {
+    const L = RWY.x1 - RWY.x0, W = RWY.w, ppu = 14;
+    return canvasTex(L * ppu, W * ppu, (x, w, h) => {
+      const u = v => v * ppu;
+      x.fillStyle = '#5c6066'; x.fillRect(0, 0, w, h);
+      speckle(x, w, h, 26000, ['#50545a', '#6a6e74', '#474a50', '#73777d'], 0.55, 1.8);
+      // rubber in the touchdown zones
+      [[6, 40], [L - 46, L - 6]].forEach(([a, b]) => { const g = x.createLinearGradient(0, 0, 0, h); g.addColorStop(0.3, 'rgba(25,25,28,0)'); g.addColorStop(0.5, 'rgba(25,25,28,0.35)'); g.addColorStop(0.7, 'rgba(25,25,28,0)'); x.fillStyle = g; x.fillRect(u(a), 0, u(b - a), h); });
+      x.fillStyle = '#f4f3ee';
+      x.fillRect(0, u(0.45), w, u(0.35)); x.fillRect(0, h - u(0.8), w, u(0.35));   // edge lines
+      for (let v = 22; v < L - 22; v += 9) x.fillRect(u(v), h / 2 - u(0.18), u(4.6), u(0.36));
+      [[2, 1], [L - 11, -1]].forEach(([s0]) => { for (let k = 0; k < 8; k++) { if (k === 3 || k === 4) continue; x.fillRect(u(s0), u(1.3 + k * 1.2), u(9), u(0.7)); } });
+      // designators, read from the approach
+      x.save(); x.font = `800 ${u(4.2)}px -apple-system, "Helvetica Neue", Arial, sans-serif`; x.textAlign = 'center'; x.textBaseline = 'middle';
+      x.translate(u(15.5), h / 2); x.rotate(Math.PI / 2); x.fillText('09', 0, 0); x.restore();
+      x.save(); x.font = `800 ${u(4.2)}px -apple-system, "Helvetica Neue", Arial, sans-serif`; x.textAlign = 'center'; x.textBaseline = 'middle';
+      x.translate(u(L - 15.5), h / 2); x.rotate(-Math.PI / 2); x.fillText('27', 0, 0); x.restore();
+      // touchdown zone pairs and aiming points
+      [[30, 1], [L - 30, -1]].forEach(([s0, dir]) => {
+        for (let k = 0; k < 3; k++) { const vx = s0 + dir * k * 10; [2.0, h / ppu - 2.0 - 0.5].forEach(z => { x.fillRect(u(vx - 2), u(z) - u(0.25), u(4), u(0.5)); x.fillRect(u(vx - 2), u(z) + u(0.55) * (z < 6 ? 1 : -1) - u(0.25), u(4), u(0.5)); }); }
+        const ax = s0 + dir * 16; x.fillRect(u(ax - 4), u(2.2), u(8), u(1.4)); x.fillRect(u(ax - 4), h - u(3.6), u(8), u(1.4));
+      });
+    });
+  }
+
   /* ---------- ground ---------- */
   {
-    const g = box(620, 1, 440, P.grass, 0, -0.5, -10); g.castShadow = false; world.add(g);
-    world.add(flat(196, 40, P.apron, 0, 0.06, -26));                      // main apron
-    world.add(flat(48, 54, P.apron, HANGAR.x, 0.06, -24));                // hangar apron
-    world.add(flat(58, 34, P.apron, -105, 0.06, -27));                    // fleet apron
-    world.add(flat(256, 8, P.taxi, -6, 0.08, TWY_Z));                     // taxiway
-    world.add(flat(9, 22, P.taxi, -122, 0.08, (RWY_Z + TWY_Z) / 2));      // west connector
-    world.add(flat(9, 22, P.taxi, 96, 0.08, (RWY_Z + TWY_Z) / 2));        // east connector
-    world.add(flat(256, 0.3, P.yellow, -6, 0.16, TWY_Z));
-    TEAMS.forEach(g => { world.add(flat(0.35, 22, P.yellow, g.x, 0.15, -36)); world.add(flat(5, 0.35, P.yellow, g.x, 0.15, -18.6)); });
+    const g = new T.Mesh(new T.PlaneGeometry(1400, 1100), (() => { const t = TEX.grass.clone(); t.needsUpdate = true; t.repeat.set(1400 / 44, 1100 / 44); return new T.MeshStandardMaterial({ map: t, roughness: 0.95 }); })());
+    g.rotation.x = -Math.PI / 2; g.position.set(0, -0.02, -10); g.receiveShadow = true; world.add(g);
+    surface(TEX.concrete, 196, 40, 0, 0.06, -26, 40);                      // main apron
+    surface(TEX.concrete, 48, 54, HANGAR.x, 0.07, -24, 40);                 // hangar apron
+    surface(TEX.concrete, 58, 34, -105, 0.07, -27, 40);                     // fleet apron
+    surface(TEX.taxi, 256, 8, -6, 0.09, TWY_Z, 32, 8);                       // taxiway
+    surface(TEX.taxi, 22, 9, -122, 0.1, (RWY_Z + TWY_Z) / 2, 32, 9, Math.PI / 2);
+    surface(TEX.taxi, 22, 9, 96, 0.1, (RWY_Z + TWY_Z) / 2, 32, 9, Math.PI / 2);
+    const rt = runwayTexture(); rt.wrapS = rt.wrapT = T.ClampToEdgeWrapping;
+    const rm = new T.MeshStandardMaterial({ map: rt, roughness: 0.82 }); surfMats.push(rm);
+    const rw = new T.Mesh(new T.PlaneGeometry(RWY.x1 - RWY.x0, RWY.w), rm); rw.rotation.x = -Math.PI / 2; rw.position.set((RWY.x0 + RWY.x1) / 2, 0.12, RWY_Z); rw.receiveShadow = true; world.add(rw);
+    // stand markings
+    TEAMS.forEach(g => { world.add(flat(0.35, 22, P.yellow, g.x, 0.15, -36)); world.add(flat(5, 0.35, P.yellow, g.x, 0.15, -18.6)); world.add(flat(16, 0.25, 0xd9473a, g.x, 0.15, -13.2)); });
     [-112, -88].forEach(x => world.add(flat(0.35, 20, P.yellow, x, 0.15, -32)));
-    world.add(flat(296, 12, P.runway, -10, 0.09, RWY_Z));
-    for (let x = -140; x < 128; x += 9) world.add(flat(4.5, 0.35, P.mark, x, 0.17, RWY_Z));
-    [-152, 132].forEach(x => { for (let i = -4; i <= 4; i++) if (i) world.add(flat(5, 0.6, P.mark, x + (x < 0 ? 4 : -4), 0.17, RWY_Z + i * 1.2)); });
-    // runway designators as flat stripes blocks
-    world.add(flat(430, 9, P.road, 0, 0.06, 34));
-    world.add(flat(118, 8, 0xa6a9ad, 0, 0.06, 22.8));
+    world.add(flat(190, 0.3, 0xf4f3ee, 0, 0.15, -10.8));                    // service road edge
+    surface(TEX.road, 430, 9, 0, 0.06, 34, 32, 9, 0, false);
+    surface(TEX.concrete, 118, 8, 0, 0.07, 22.8, 40, 40, 0, false);
     world.add(box(118, 0.4, 1.2, 0xf0ede6, 0, 0.2, 18.2));
     [[-94, 54], [94, 54]].forEach(([x, z]) => {
-      world.add(flat(72, 22, 0xb6b8bb, x, 0.06, z));
+      world.add(flat(72, 22, 0xb2b4b7, x, 0.06, z));
       for (let i = -6; i <= 6; i++) { world.add(flat(0.2, 7, P.mark, x + i * 5, 0.14, z - 6)); world.add(flat(0.2, 7, P.mark, x + i * 5, 0.14, z + 6)); }
     });
   }
 
+  /* ---------- sky dome, hills and clouds ---------- */
+  const skyU = { top: { value: new T.Color(0x8fb7dc) }, mid: { value: new T.Color(0xe3ebf0) }, sunDir: { value: new T.Vector3(0.5, 0.5, 0.5) }, sunCol: { value: new T.Color(0xfff1dc) }, glowK: { value: 0.4 } };
+  const sky = new T.Mesh(new T.SphereGeometry(1600, 32, 16), new T.ShaderMaterial({
+    uniforms: skyU, side: T.BackSide, depthWrite: false, fog: false,
+    vertexShader: 'varying vec3 vDir; void main(){ vDir = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
+    fragmentShader: 'uniform vec3 top; uniform vec3 mid; uniform vec3 sunDir; uniform vec3 sunCol; uniform float glowK; varying vec3 vDir; void main(){ float h = clamp(vDir.y, 0.0, 1.0); vec3 c = mix(mid, top, pow(h, 0.55)); float s = max(dot(normalize(vDir), normalize(sunDir)), 0.0); c += sunCol * (pow(s, 24.0) * 0.6 + pow(s, 4.0) * 0.18) * glowK; gl_FragColor = vec4(c, 1.0); }'
+  }));
+  sky.renderOrder = -10; scene.add(sky);
+  const hillMat = new T.MeshStandardMaterial({ color: 0x9db08f, roughness: 1, flatShading: true });
+  {
+    const segs = 96, rows = 3, pos = [], idx = [];
+    const rnd = (() => { let s = 99; return () => (s = (s * 16807) % 2147483647) / 2147483647; })();
+    for (let r = 0; r <= rows; r++) for (let i = 0; i < segs; i++) {
+      const a = i / segs * Math.PI * 2, rad = 560 + r * 140;
+      const hgt = r === 0 ? -2 : (20 + 60 * rnd()) * (r / rows) * (0.6 + 0.4 * Math.sin(a * 3 + 1.3)) + (a > 3.6 && a < 5.2 ? 70 * (r / rows) : 0);
+      pos.push(Math.cos(a) * rad, hgt, Math.sin(a) * rad - 10);
+    }
+    for (let r = 0; r < rows; r++) for (let i = 0; i < segs; i++) { const a = r * segs + i, b = r * segs + (i + 1) % segs, c = a + segs, d = b + segs; idx.push(a, c, b, b, c, d); }
+    const g = new T.BufferGeometry(); g.setAttribute('position', new T.Float32BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals();
+    world.add(new T.Mesh(g, hillMat));
+  }
+  const clouds = [];
+  {
+    const cg = new T.IcosahedronGeometry(1, 1), cm = new T.MeshStandardMaterial({ color: 0xffffff, roughness: 1, flatShading: true, transparent: true, opacity: 0.95 });
+    for (let i = 0; i < 14; i++) {
+      const grp = new T.Group(); const n = 4 + Math.floor(Math.random() * 4);
+      for (let k = 0; k < n; k++) { const m = new T.Mesh(cg, cm); const sz = 9 + Math.random() * 12; m.scale.set(sz * 1.4, sz * 0.7, sz); m.position.set((k - n / 2) * 11 + Math.random() * 6, Math.random() * 5, Math.random() * 10 - 5); grp.add(m); }
+      const a = Math.random() * Math.PI * 2, r = 330 + Math.random() * 260;
+      grp.position.set(Math.cos(a) * r, 70 + Math.random() * 70, Math.sin(a) * r - 60); world.add(grp); clouds.push(grp);
+    }
+    clouds.mat = cm;
+  }
+
   /* ---------- edge lights (instanced) ---------- */
-  const edgeMats = [];
+  const edgeMats = []; let edgeGlow = null;
+  const pools = [];
+  function lightPool(w, d, color, x, z, y = 0.22) {
+    const m = new T.Mesh(new T.PlaneGeometry(w, d), new T.MeshBasicMaterial({ map: GLOW, color, transparent: true, opacity: 0, depthWrite: false, blending: T.AdditiveBlending }));
+    m.rotation.x = -Math.PI / 2; m.position.set(x, y, z); m.renderOrder = 2; world.add(m); pools.push(m); return m;
+  }
   {
     const pts = [];
     for (let x = -152; x <= 132; x += 8) { pts.push([x, RWY_Z - 6.4, 0]); pts.push([x, RWY_Z + 6.4, 0]); }
@@ -332,6 +456,12 @@ function mount(container, opts) {
       list.forEach((p, i) => { o.position.set(p[0], 0.35, p[1]); o.updateMatrix(); im.setMatrixAt(i, o.matrix); });
       world.add(im);
     });
+    // the same lights as soft glows for the night
+    const gp = new Float32Array(pts.length * 3), gc = new Float32Array(pts.length * 3), cc = new T.Color();
+    pts.forEach((p, i) => { gp.set([p[0], 0.5, p[1]], i * 3); cc.setHex([0xfff1c8, 0x4ea3ff, 0x52e07a, 0xff4a4a][p[2]]); gc.set([cc.r, cc.g, cc.b], i * 3); });
+    const gg = new T.BufferGeometry(); gg.setAttribute('position', new T.BufferAttribute(gp, 3)); gg.setAttribute('color', new T.BufferAttribute(gc, 3));
+    edgeGlow = new T.Points(gg, new T.PointsMaterial({ map: GLOW, size: 3.2, vertexColors: true, transparent: true, opacity: 0, depthWrite: false, blending: T.AdditiveBlending }));
+    world.add(edgeGlow);
   }
   // approach light glow bars (night)
   const approachGlows = [];
@@ -342,7 +472,11 @@ function mount(container, opts) {
   function terminalWing(x0, x1) {
     const w = x1 - x0, cx = (x0 + x1) / 2, g = new T.Group();
     g.add(box(w, 0.6, 18, P.terminal, cx, 0.3, 5));
-    const fl = box(w - 1, 0.05, 16.6, 0xefe9df, cx, 0.62, 5); fl.castShadow = false; g.add(fl);
+    { const t = TEX.floor.clone(); t.needsUpdate = true; t.repeat.set((w - 1) / 12, 16.6 / 12);
+      const fl = new T.Mesh(new T.PlaneGeometry(w - 1, 16.6), new T.MeshStandardMaterial({ map: t, roughness: 0.5 })); fl.rotation.x = -Math.PI / 2; fl.position.set(cx, 0.63, 5); fl.receiveShadow = true; g.add(fl); }
+    g.add(box(w + 1, 0.3, 3.4, P.roof, cx, 4.95, -5.3));                                   // airside canopy
+    g.add(box(w, 0.4, 0.66, 0xff9f0a, cx, 4.3, 13.72));                                     // brand band on the landside wall
+    for (let x = x0 + 1; x < x1; x += 4) g.add(box(0.25, 3.4, 0.5, 0xd8d2c7, x, 2.4, 14.1)); // facade fins
     g.add(box(w, 4.2, 0.6, P.terminal, cx, 2.4, 13.7));
     const glassM = new T.MeshStandardMaterial({ color: P.glass, transparent: true, opacity: 0.28, roughness: 0.1, metalness: 0.1 });
     g.add(mesh(new T.BoxGeometry(w, 3.6, 0.2), glassM, cx, 2.4, -3.8, false, false));
@@ -355,6 +489,63 @@ function mount(container, opts) {
     return g;
   }
   world.add(terminalWing(-72, -8)); world.add(terminalWing(8, 72));
+  // team rugs, gate seating and plants inside the cut-away terminal
+  {
+    const floorC = new T.Color(0xf1ece3);
+    TEAMS.forEach(g => { if (g.id === 'D') return; const rug = new T.Mesh(new T.PlaneGeometry(14.5, 10.5), new T.MeshStandardMaterial({ color: floorC.clone().lerp(new T.Color(g.color), 0.2), roughness: 0.95 })); rug.rotation.x = -Math.PI / 2; rug.position.set(g.x, 0.66, 5.4); rug.receiveShadow = true; world.add(rug); });
+    const seatG = new T.BoxGeometry(0.8, 0.9, 0.8), seats = []; 
+    TEAMS.forEach(g => { if (g.id === 'D') return; for (let r = 0; r < 2; r++) for (let i = 0; i < 7; i++) seats.push([g.x - 9 + i * 0.95 - 8, -1.7 + r * 1.3]); });
+    const sm = new T.InstancedMesh(seatG, mat(0x3b4a5e), seats.length); const o = new T.Object3D();
+    seats.forEach(([x, z], i) => { o.position.set(x + 8, 1.1, z); o.updateMatrix(); sm.setMatrixAt(i, o.matrix); }); sm.castShadow = true; world.add(sm);
+    const potG = new T.CylinderGeometry(0.5, 0.4, 0.8, 10), leafG = new T.IcosahedronGeometry(0.9, 0);
+    [[-70, 12], [-10, 12], [10, 12], [70, 12], [-70, -2], [70, -2], [-6, -2], [6, -2]].forEach(([x, z]) => { world.add(mesh(potG, mat(0xd8cbb5), x + (x < 0 ? 1.2 : -1.2), 1.0, z)); const l = mesh(leafG, mat(0x6f9a5c, { flatShading: true }), x + (x < 0 ? 1.2 : -1.2), 2.0, z); l.scale.set(1, 1.3, 1); world.add(l); });
+  }
+  /* ---------- split-flap boards on the landside roof: departures and arrivals ---------- */
+  const boards = [];
+  function makeBoard(kind, x) {
+    const c = document.createElement('canvas'); c.width = 1024; c.height = 384;
+    const tex = new T.CanvasTexture(c); if ('colorSpace' in tex) tex.colorSpace = T.SRGBColorSpace; tex.anisotropy = Math.min(8, maxAniso);
+    const grp = new T.Group(); grp.position.set(x, 0, 14.4);
+    grp.add(box(25.2, 9.8, 0.6, 0x23272e, 0, 9.9, -0.35));
+    const face = new T.Mesh(new T.PlaneGeometry(24, 9), new T.MeshBasicMaterial({ map: tex, toneMapped: false })); face.position.set(0, 9.9, 0.0); grp.add(face);
+    [-9, 9].forEach(px => grp.add(box(0.5, 1.4, 0.5, 0x5c636d, px, 4.7, -0.3)));
+    world.add(grp); pickable(grp, { kind: 'board', id: kind === 'dep' ? 'departures' : 'arrivals' });
+    const b = { kind, c, x: c.getContext('2d'), tex, grp }; boards.push(b); return b;
+  }
+  const BOARD_TXT = lang === 'es'
+    ? { dep: 'SALIDAS', arr: 'LLEGADAS', time: 'HORA', item: 'ASUNTO', status: 'ESTADO', over: 'VENCIDO', board: 'EMBARQUE', sched: 'PROGRAM.', landed: 'LLEGADO', done: 'HECHO', none: 'SIN MOVIMIENTOS' }
+    : { dep: 'DEPARTURES', arr: 'ARRIVALS', time: 'TIME', item: 'ITEM', status: 'STATUS', over: 'OVERDUE', board: 'BOARDING', sched: 'SCHEDULED', landed: 'LANDED', done: 'DONE', none: 'NO MOVEMENTS' };
+  function dayKey(d) { try { return new Intl.DateTimeFormat('en-CA', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).format(d); } catch (e) { return d.toISOString().slice(0, 10); } }
+  function flapText(x, str, px, py, n, col) {
+    const cw = 21.5, ch = 38; str = String(str || '').toUpperCase().slice(0, n).padEnd(n, ' ');
+    for (let i = 0; i < n; i++) {
+      const cx = px + i * cw; x.fillStyle = '#191d24'; x.fillRect(cx, py - ch + 8, cw - 2.5, ch);
+      x.fillStyle = '#0b0d11'; x.fillRect(cx, py - ch / 2 + 7, cw - 2.5, 1.6);
+      x.fillStyle = col; x.fillText(str[i], cx + (cw - 2.5) / 2, py);
+    }
+  }
+  function drawBoard(b) {
+    const x = b.x, W = 1024, H = 384, room = D.room || {}, now = Date.now();
+    x.fillStyle = '#0d1014'; x.fillRect(0, 0, W, H);
+    x.fillStyle = '#ffb340'; x.font = '700 38px ui-monospace, "SF Mono", Menlo, monospace'; x.textAlign = 'left'; x.textBaseline = 'alphabetic';
+    x.fillText((b.kind === 'dep' ? '↗ ' : '↘ ') + (b.kind === 'dep' ? BOARD_TXT.dep : BOARD_TXT.arr), 30, 56);
+    x.textAlign = 'right'; x.fillStyle = '#f5f1e6'; x.fillText(clockStr(), W - 30, 56);
+    x.font = '600 18px ui-monospace, "SF Mono", Menlo, monospace'; x.fillStyle = '#7d8590'; x.textAlign = 'left';
+    x.fillText(BOARD_TXT.time, 32, 94); x.fillText(BOARD_TXT.item, 168, 94); x.fillText(BOARD_TXT.status, W - 236, 94);
+    let rows = [];
+    if (b.kind === 'dep') rows = (room.departures || []).slice().sort((a, c) => String(a.due).localeCompare(String(c.due))).slice(0, 5).map(d => {
+      const due = new Date(d.due).getTime(), dt = due - now;
+      return { t: isNaN(due) ? '' : (dayKey(new Date(due)) === dayKey(new Date()) ? clockStr(new Date(due)) : dayKey(new Date(due)).slice(8, 10) + '/' + dayKey(new Date(due)).slice(5, 7)), w: txt(d, 'what'), st: dt < 0 ? BOARD_TXT.over : dt < 3 * 36e5 ? BOARD_TXT.board : BOARD_TXT.sched, c: dt < 0 ? '#ff5a4f' : dt < 3 * 36e5 ? '#4cd964' : '#f5f1e6' };
+    });
+    else { const src = (room.arrivals || []).length ? room.arrivals : (room.feed || []); rows = src.slice().sort((a, c) => String(c.at).localeCompare(String(a.at))).slice(0, 5).map(a => ({ t: a.at ? clockStr(new Date(a.at)) : '', w: txt(a, 'what'), st: (room.arrivals || []).length ? BOARD_TXT.landed : BOARD_TXT.done, c: '#4cd964' })); }
+    x.font = '600 28px ui-monospace, "SF Mono", Menlo, monospace'; x.textAlign = 'center';
+    if (!rows.length) flapText(x, BOARD_TXT.none, 168, 160, 20, '#7d8590');
+    rows.forEach((r, i) => { const y = 148 + i * 50; flapText(x, r.t, 30, y, 5, '#ffb340'); flapText(x, r.w, 168, y, 27, '#f5f1e6'); flapText(x, r.st, W - 238, y, 9, r.c); });
+    b.tex.needsUpdate = true;
+  }
+  makeBoard('dep', -40); makeBoard('arr', 40);
+  function updateBoards() { boards.forEach(drawBoard); }
+  updateBoards();
   world.add(box(16, 0.6, 18, P.terminal, 0, 0.3, 5));
   { const f = box(15, 0.05, 16.6, 0xe9e2d6, 0, 0.62, 5); f.castShadow = false; world.add(f); }
   world.add(cyl(6.2, 6.6, 0.5, 0xdcd5c9, TOWER.x, 0.9, TOWER.z, 40));
@@ -364,7 +555,7 @@ function mount(container, opts) {
      big enough to read from the overview. */
   const BRAIN_Y = 47, BRAIN_S = 2.3;
   const brainGroup = new T.Group();
-  let radar, radarRing, brainHalo, beaconM, padM;
+  let radar, radarRing, brainHalo, beaconM, padM, beam;
   const towerG = new T.Group(); towerG.position.set(TOWER.x, 0, TOWER.z);
   {
     const g = towerG;
@@ -391,7 +582,7 @@ function mount(container, opts) {
     const hit = mesh(new T.SphereGeometry(4.2, 12, 8), new T.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }), 0, 0.3, 0, false, false);
     brainGroup.add(hit); pickable(hit, { kind: 'brain', id: 'brain' });
     // light column from the platform to the brain
-    const beam = mesh(new T.CylinderGeometry(1.6, 3.6, BRAIN_Y - 36, 24, 1, true), new T.MeshBasicMaterial({ color: 0x8fdcff, transparent: true, opacity: 0.12, depthWrite: false, side: T.DoubleSide, blending: T.AdditiveBlending }), TOWER.x, 31.9 + (BRAIN_Y - 36) / 2, TOWER.z, false, false);
+    beam = mesh(new T.CylinderGeometry(1.6, 3.6, BRAIN_Y - 36, 24, 1, true), new T.MeshBasicMaterial({ color: 0x8fdcff, transparent: true, opacity: 0.12, depthWrite: false, side: T.DoubleSide, blending: T.AdditiveBlending }), TOWER.x, 31.9 + (BRAIN_Y - 36) / 2, TOWER.z, false, false);
     world.add(beam);
     radarRing = mesh(new T.RingGeometry(0.96, 1, 96), new T.MeshBasicMaterial({ color: 0x64d2ff, transparent: true, opacity: 0, depthWrite: false, side: T.DoubleSide }), TOWER.x, 0.45, TOWER.z, false, false);
     radarRing.rotation.x = -Math.PI / 2; world.add(radarRing);
@@ -416,6 +607,25 @@ function mount(container, opts) {
     return V(px * r * 2.6, py * r * 2.6 + 0.4, pz * r * 2.6);
   }
   function seeded(seed) { let s = seed >>> 0 || 1; return () => { s ^= s << 13; s >>>= 0; s ^= s >> 17; s ^= s << 5; s >>>= 0; return s / 4294967296; }; }
+  BR.u = { uTime: { value: 0 }, uPulse: { value: 0 }, uSpin: { value: 0 }, uFocus: { value: -1 }, uPx: { value: 600 }, uReduced: { value: reduced ? 1 : 0 }, uNight: { value: 0 } };
+  const BRAIN_VS = `attribute vec3 aColor; attribute float aSize; attribute vec2 aPh; attribute float aHot; attribute float aNode;
+    uniform float uTime, uPulse, uSpin, uFocus, uPx, uReduced; varying vec3 vColor;
+    void main(){
+      float wob = (1.0 - uReduced) * sin(uTime * aPh.y + aPh.x) * 0.05 * (1.0 + uPulse * 2.0);
+      float c = cos(uSpin), s = sin(uSpin);
+      vec3 p = vec3(position.x * c - position.z * s, position.y, position.x * s + position.z * c);
+      p.xz *= 1.0 + wob * 0.2; p.y += wob;
+      float sz = aSize * (1.0 + 0.6 * uPulse * (sin(uTime * 6.0 + aPh.x) * 0.5 + 0.5));
+      if (aHot > 0.5) sz *= 1.0 + 0.5 * (sin(uTime * 4.0 + aPh.x) * 0.5 + 0.5) * (1.0 - uReduced);
+      if (uFocus >= 0.0 && abs(aNode - uFocus) < 0.5) sz *= 2.4;
+      vec4 mv = modelViewMatrix * vec4(p, 1.0);
+      gl_PointSize = max(1.5, sz * uPx / -mv.z);
+      gl_Position = projectionMatrix * mv; vColor = aColor;
+    }`;
+  const BRAIN_FS = `uniform float uNight; varying vec3 vColor;
+    void main(){ vec2 d = gl_PointCoord - 0.5; float r = length(d); if (r > 0.5) discard;
+      float core = 1.0 - smoothstep(0.0, 0.5, r); float a = pow(core, 1.2);
+      gl_FragColor = vec4(vColor * (0.9 + mix(0.6, 0.9, uNight) * pow(core, 5.0)), a); }`;
   function setGraph(graph) {
     D.graph = graph || { nodes: [], edges: [] };
     const nodes = (D.graph.nodes || []).slice(0, 420);
@@ -424,36 +634,35 @@ function mount(container, opts) {
     const per = nodes.length ? clamp(Math.floor((isPhone ? 900 : 1500) / nodes.length), 2, 10) : 0;
     const filler = nodes.length ? (isPhone ? 500 : 900) : (isPhone ? 1100 : 1800);
     const N = nodes.length * per + filler;
-    const geo = new T.IcosahedronGeometry(0.07, 1);
-    const m = new T.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.95, depthWrite: false });
-    const im = new T.InstancedMesh(geo, m, N); im.instanceMatrix.setUsage(T.DynamicDrawUsage);
     const seeds = [], centers = [];
     // cluster nodes by type into regions of the brain so each lobe means something
     const typeAnchor = { card: V(-0.6, 0.5, 0.65).normalize(), party: V(0.6, 0.5, 0.65).normalize(), note: V(0, 1, -0.2).normalize(), doc: V(-0.6, 0.1, -0.8).normalize(), person: V(0.65, 0.05, -0.75).normalize() };
-    const col = new T.Color();
+    const pos = new Float32Array(N * 3), colA = new Float32Array(N * 3), sizeA = new Float32Array(N), phA = new Float32Array(N * 2), hotA = new Float32Array(N), nodeA = new Float32Array(N);
+    const col = new T.Color(), white = new T.Color(0xffffff);
     let k = 0;
+    const put = (p, c, size, ph, sp, hot, ni) => { pos.set([p.x, p.y, p.z], k * 3); colA.set([c.r, c.g, c.b], k * 3); sizeA[k] = size; phA.set([ph, sp], k * 2); hotA[k] = hot ? 1 : 0; nodeA[k] = ni; seeds.push({ node: ni }); k++; };
     nodes.forEach((n, ni) => {
       const rnd = seeded(hashStr(String(n.id)));
-      const a = typeAnchor[n.type] || V(0, 0, 0);
-      let c = brainShape(rnd, 0.02, typeAnchor[n.type] || null);
+      const c = brainShape(rnd, 0.02, typeAnchor[n.type] || null);
       centers.push({ node: n, p: c });
       const hex = n.type === 'card' ? (/(sign|firm|won|paid|done)/i.test(n.stage || '') ? 0x30d158 : /(declin|lost|rechaz)/i.test(n.stage || '') ? 0x8e8e93 : 0xff9f0a) : (P.node[n.type] || P.node.other);
       for (let j = 0; j < per; j++) {
         const off = V(rnd() - 0.5, rnd() - 0.5, rnd() - 0.5).multiplyScalar(0.42 + (n.weight ? Math.min(3, n.weight) * 0.08 : 0));
-        const p = c.clone().add(off);
-        seeds.push({ x: p.x, y: p.y, z: p.z, ph: rnd() * 6.28, sp: 0.4 + rnd() * 0.9, s: (n.hot ? 1.25 : 0.8) + rnd() * 0.5, hot: !!n.hot, node: ni });
-        col.setHex(hex); if (!n.hot) col.lerp(new T.Color(0xffffff), 0.15);
-        im.setColorAt(k++, col);
+        col.setHex(hex); if (!n.hot) col.lerp(white, 0.12);
+        put(c.clone().add(off), col, (n.hot ? 0.34 : 0.24) + rnd() * 0.12, rnd() * 6.28, 0.4 + rnd() * 0.9, n.hot, ni);
       }
     });
     const rnd = seeded(7);
     for (let j = 0; j < filler; j++) {
-      const p = brainShape(rnd);
-      seeds.push({ x: p.x, y: p.y, z: p.z, ph: rnd() * 6.28, sp: 0.4 + rnd() * 0.9, s: 0.6 + rnd() * 0.6, hot: false, node: -1 });
-      col.setHex(0x7fd4ff).lerp(new T.Color(0xffffff), 0.25 + rnd() * 0.35);
-      im.setColorAt(k++, col);
+      col.setHex(0x7fd4ff).lerp(white, 0.2 + rnd() * 0.4);
+      put(brainShape(rnd), col, 0.16 + rnd() * 0.12, rnd() * 6.28, 0.4 + rnd() * 0.9, false, -1);
     }
-    if (im.instanceColor) im.instanceColor.needsUpdate = true;
+    const geo = new T.BufferGeometry();
+    geo.setAttribute('position', new T.BufferAttribute(pos, 3)); geo.setAttribute('aColor', new T.BufferAttribute(colA, 3));
+    geo.setAttribute('aSize', new T.BufferAttribute(sizeA, 1)); geo.setAttribute('aPh', new T.BufferAttribute(phA, 2));
+    geo.setAttribute('aHot', new T.BufferAttribute(hotA, 1)); geo.setAttribute('aNode', new T.BufferAttribute(nodeA, 1));
+    const im = new T.Points(geo, new T.ShaderMaterial({ uniforms: BR.u, vertexShader: BRAIN_VS, fragmentShader: BRAIN_FS, transparent: true, depthWrite: false }));
+    im.frustumCulled = false;
     BR.mesh = im; BR.seeds = seeds; BR.centers = centers; BR.N = N;
     brainGroup.add(im);
     // synapses: a faint line per edge between node centres
@@ -467,6 +676,15 @@ function mount(container, opts) {
       brainGroup.add(BR.edges);
     } else BR.edges = null;
     BR.edgeCount = es.length;
+    if (BR.sig) { brainGroup.remove(BR.sig); BR.sig.geometry.dispose(); }
+    BR.sigEdges = es.map(e => [centers[idx.get(String(e.s))].p, centers[idx.get(String(e.t))].p]);
+    if (!BR.sigEdges.length) { const r2 = seeded(3); for (let i = 0; i < 60; i++) BR.sigEdges.push([brainShape(r2), brainShape(r2)]); }
+    const NS = isPhone ? 70 : 140, sp = new Float32Array(NS * 3);
+    const sg = new T.BufferGeometry(); sg.setAttribute('position', new T.BufferAttribute(sp, 3));
+    BR.sig = new T.Points(sg, new T.PointsMaterial({ map: GLOW, color: 0xbfeaff, size: 0.55, transparent: true, depthWrite: false, blending: T.AdditiveBlending }));
+    BR.sig.frustumCulled = false;
+    BR.sigs = Array.from({ length: NS }, () => ({ e: Math.floor(Math.random() * BR.sigEdges.length), t: Math.random(), v: 0.35 + Math.random() * 0.6 }));
+    brainGroup.add(BR.sig);
   }
   setGraph(null);
 
@@ -552,7 +770,10 @@ function mount(container, opts) {
       const lm = new T.MeshBasicMaterial({ color: 0x8a8a8a }); lampMats.push(lm);
       world.add(mesh(new T.BoxGeometry(3, 0.8, 1.2), lm, x, 16.2, -11, false, false));
       const gl = glow(0xffe6b0, 14, 0); gl.position.set(x, 16.2, -11.8); world.add(gl); floodGlows.push(gl);
+      lightPool(52, 44, 0xffd9a0, x, -22);
     });
+    lightPool(70, 14, 0xffc977, -40, -6); lightPool(70, 14, 0xffc977, 40, -6);
+    lightPool(120, 12, 0xffd9a0, 0, 22.5); lightPool(40, 30, 0xffd9a0, HANGAR.x, -32);
   }
 
   /* ================================================== PEOPLE */
@@ -614,6 +835,7 @@ function mount(container, opts) {
   }
   function onAgents() {
     D.agents.forEach(a => { if (!a._p) addPerson(a); });
+    updateBoards();
     // Jarvis just started a sweep: its team walks to the brain
     const j = D.byId.get('jarvis');
     if (j && j.justStarted) startSweep();
@@ -677,67 +899,93 @@ function mount(container, opts) {
   }
 
   /* ================================================== AIRCRAFT */
-  function makeJet(liveryHex) {
+  /* One builder for every aircraft: lathe fuselage with an upswept tail,
+     extruded swept wings, nacelles, window rows, cheatline and fin livery. */
+  const winGeo = new T.BoxGeometry(0.16, 0.2, 0.16);
+  function wingGeom(rootC, tipC, span, sweep, thick, side) {
+    const sh = new T.Shape(), sx = side;
+    sh.moveTo(0, rootC * 0.45); sh.lineTo(sx * span, rootC * 0.45 - sweep); sh.lineTo(sx * span, rootC * 0.45 - sweep - tipC); sh.lineTo(0, -rootC * 0.55); sh.closePath();
+    const g = new T.ExtrudeGeometry(sh, { depth: thick, bevelEnabled: true, bevelThickness: thick * 0.35, bevelSize: thick * 0.35, bevelSegments: 1 });
+    g.rotateX(Math.PI / 2); g.translate(0, thick / 2, 0); return g;
+  }
+  function nacelle(re, le, m, dark) {
     const g = new T.Group();
-    const body = mat(0xf7f7f5), dark = mat(0x26303b), engine = mat(0xdadde2), livery = mat(liveryHex);
-    const fus = mesh(new T.CylinderGeometry(0.85, 0.85, 8.4, 18), body, 0, 1.9, 0); fus.rotation.x = Math.PI / 2; g.add(fus);
-    const nose = mesh(new T.SphereGeometry(0.85, 18, 12), body, 0, 1.9, 4.2); nose.scale.z = 1.6; g.add(nose);
-    const tail = mesh(new T.ConeGeometry(0.85, 2.8, 18), body, 0, 2.05, -5.6); tail.rotation.x = -Math.PI / 2; g.add(tail);
-    const ck = box(1.0, 0.28, 0.5, dark, 0, 2.38, 5.0); ck.rotation.x = -0.35; g.add(ck);
-    [-1, 1].forEach(s => g.add(box(0.04, 0.22, 6.8, dark, s * 0.86, 2.15, 0.2)));
-    g.add(box(1.2, 0.12, 8, livery, 0, 1.12, 0));
-    [-1, 1].forEach(s => {
-      const wing = box(6.2, 0.16, 1.9, body, s * 3.6, 1.45, -0.2); wing.rotation.y = s * 0.42; g.add(wing);
-      g.add(box(0.1, 0.9, 0.6, livery, s * 6.55, 1.85, -1.55));
-      const eng = mesh(new T.CylinderGeometry(0.48, 0.42, 1.8, 14), engine, s * 2.4, 1.05, 0.9); eng.rotation.x = Math.PI / 2; g.add(eng);
-      const hs = box(2.6, 0.1, 0.9, body, s * 1.4, 2.2, -5.9); hs.rotation.y = s * 0.45; g.add(hs);
-    });
-    const fs = new T.Shape(); fs.moveTo(0, 0); fs.lineTo(2.6, 0); fs.lineTo(3.3, 2.8); fs.lineTo(2.2, 2.8); fs.closePath();
-    const fin = mesh(new T.ExtrudeGeometry(fs, { depth: 0.16, bevelEnabled: false }), livery, -0.08, 2.4, -3.4); fin.rotation.y = Math.PI / 2; g.add(fin);
+    const lg = new T.LatheGeometry([[re * 0.82, 0], [re, le * 0.12], [re * 0.98, le * 0.7], [re * 0.62, le]].map(([r, y]) => new T.Vector2(r, y)), 20);
+    // lathe axis y -> -z, shifted so the intake lip sits at z = le and faces forward
+    const n = new T.Mesh(lg, m); n.rotation.x = -Math.PI / 2; n.position.z = le; n.castShadow = true; g.add(n);
+    const disc = new T.Mesh(new T.CircleGeometry(re * 0.8, 20), dark); disc.position.z = le - 0.06; g.add(disc);
+    const fan = new T.Mesh(new T.CircleGeometry(re * 0.3, 12), mat(0xb0b6bd)); fan.position.z = le - 0.04; g.add(fan);
+    g.position.z = -le / 2; const outer = new T.Group(); outer.add(g); return outer;
+  }
+  function airliner(o) {
+    const g = new T.Group(); const L = o.len, R = o.r, Y = o.y;
+    const body = mat(o.body || 0xf7f7f5), dark = mat(0x1d2530, { roughness: 0.35, metalness: 0.2 }), acc = mat(o.livery), wingM = mat(o.wing || 0xe9ebee, { side: T.DoubleSide }), engM = mat(o.engine || o.livery);
+    // fuselage
+    const prof = [[0.01, 0], [R * 0.45, R * 0.14], [R * 0.75, R * 0.5], [R * 0.93, R * 1.05], [R, R * 1.8], [R, L - R * 3.4], [R * 0.9, L - R * 2.3], [R * 0.6, L - R * 1.1], [R * 0.26, L - 0.18], [0.02, L]];
+    const fg = new T.LatheGeometry(prof.map(([r, y]) => new T.Vector2(r, y)), 26);
+    const pa = fg.attributes.position;
+    for (let i = 0; i < pa.count; i++) { const y = pa.getY(i); const t0 = L - R * 3.6; if (y > t0) { const t = (y - t0) / (L - t0); pa.setZ(i, pa.getZ(i) + Math.pow(t, 1.6) * R * 0.62); } if (y < R * 1.2) pa.setZ(i, pa.getZ(i) - (1 - y / (R * 1.2)) * R * 0.12); }
+    fg.computeVertexNormals();
+    const fus = new T.Mesh(fg, body); fus.rotation.x = -Math.PI / 2; fus.position.set(0, Y, L / 2); fus.castShadow = true; fus.receiveShadow = true; g.add(fus);
+    // cockpit glazing
+    const ck = new T.Mesh(new T.CylinderGeometry(R * 0.7, R * 0.84, R * 0.55, 18, 1, true, -1.1, 2.2), dark); ck.rotation.x = Math.PI / 2 - 0.55; ck.rotation.z = Math.PI; ck.position.set(0, Y + R * 0.42, L / 2 - R * 0.95); g.add(ck);
+    // cabin windows and cheatline
+    const nW = Math.floor((L - R * 6) / 0.62);
+    const wins = new T.InstancedMesh(winGeo, dark, nW * 2); const o3 = new T.Object3D(); let wi = 0;
+    for (const sx of [-1, 1]) for (let i = 0; i < nW; i++) { o3.position.set(sx * R * 0.985, Y + R * 0.3, L / 2 - R * 2.4 - i * 0.62); o3.scale.set(1, 1, 1); o3.updateMatrix(); wins.setMatrixAt(wi++, o3.matrix); }
+    g.add(wins);
+    for (const sx of [-1, 1]) { const st = new T.Mesh(new T.BoxGeometry(0.05, R * 0.22, L - R * 4.2), acc); st.position.set(sx * R * 0.99, Y - R * 0.12, -R * 0.4); g.add(st); }
+    // door outlines (forward left)
+    const door = new T.Mesh(new T.BoxGeometry(0.05, R * 1.0, R * 0.55), mat(0xd8dbe0)); door.position.set(-R * 0.995, Y + R * 0.05, L / 2 - R * 2.2); g.add(door);
+    // wings
+    const wz = o.wingZ ?? L * 0.06, wy = Y - R * 0.5;
+    for (const sx of [-1, 1]) {
+      const wg = new T.Group(); wg.position.set(sx * R * 0.55, wy, wz); wg.rotation.z = sx * (o.dihedral ?? 0.07);
+      const w = new T.Mesh(wingGeom(o.rootC, o.tipC, o.span, o.sweep, o.thick || 0.22, sx), wingM); w.castShadow = true; w.receiveShadow = true; wg.add(w);
+      if (o.tips === 'winglet') { const wl = new T.Mesh(new T.BoxGeometry(0.08, R * 1.1, o.tipC * 0.9), acc); wl.position.set(sx * o.span, R * 0.5, o.rootC * 0.45 - o.sweep - o.tipC * 0.5); wl.rotation.x = -0.35; wg.add(wl); }
+      if (o.tips === 'raked') { const rk = new T.Mesh(wingGeom(o.tipC, 0.18, o.span * 0.12, o.tipC * 0.9, 0.12, sx), wingM); rk.position.set(sx * o.span, 0.02, o.rootC * 0.45 - o.sweep); wg.add(rk); }
+      const nav = glow(sx < 0 ? 0xff3b30 : 0x34c759, 1.8); nav.position.set(sx * (o.span + (o.tips === 'raked' ? o.span * 0.12 : 0.1)), 0.3, o.rootC * 0.45 - o.sweep - o.tipC * 0.5); wg.add(nav); (g.userData.navs = g.userData.navs || []).push(nav);
+      if (o.engines === 'wing') {
+        const n = nacelle(o.er, o.el, engM, dark); n.position.set(sx * o.span * 0.34, -o.er * 0.95, o.rootC * 0.45 - o.sweep * 0.34 + o.el * 0.35); wg.add(n);
+        const py = new T.Mesh(new T.BoxGeometry(0.16, o.er * 0.7, o.el * 0.7), wingM); py.position.set(sx * o.span * 0.34, -o.er * 0.3, o.rootC * 0.45 - o.sweep * 0.34 + o.el * 0.1); wg.add(py);
+      }
+      g.add(wg);
+    }
+    if (o.engines === 'rear') for (const sx of [-1, 1]) {
+      const n = nacelle(o.er, o.el, engM, dark); n.position.set(sx * (R + o.er * 1.15), Y + R * 0.35, -L / 2 + R * 3.3); g.add(n);
+      const py = new T.Mesh(new T.BoxGeometry(o.er * 1.2, 0.14, o.el * 0.5), body); py.position.set(sx * (R + o.er * 0.4), Y + R * 0.35, -L / 2 + R * 3.3); g.add(py);
+    }
+    // fin
+    const fh = o.finH, fc = o.finC, fsw = fh * 0.85;
+    const fs = new T.Shape(); fs.moveTo(0, 0); fs.lineTo(fc, 0); fs.lineTo(fc * 0.92 + fsw * 0.35, fh); fs.lineTo(fsw * 0.35 + fc * 0.92 - fc * 0.5, fh); fs.lineTo(fsw * 0.0 + fc * 0.12, fh * 0.3); fs.closePath();
+    const fgeo = new T.ExtrudeGeometry(fs, { depth: 0.18, bevelEnabled: true, bevelThickness: 0.05, bevelSize: 0.05, bevelSegments: 1 }); fgeo.rotateY(Math.PI / 2); fgeo.translate(-0.09, 0, 0);
+    const fin = new T.Mesh(fgeo, acc); fin.position.set(0, Y + R * 0.75, -L / 2 + fc + R * 0.4); fin.castShadow = true; g.add(fin);
+    const fstripe = new T.Mesh(new T.BoxGeometry(0.26, fh * 0.12, fc * 0.6), mat(0xffffff)); fstripe.position.set(0, Y + R * 0.75 + fh * 0.55, -L / 2 + fc * 0.5 + R * 0.4 - fsw * 0.2); g.add(fstripe);
+    // horizontal stabiliser (on the fin top for a T-tail)
+    const hy = o.ttail ? Y + R * 0.75 + fh - 0.05 : Y + R * 0.35, hz = o.ttail ? -L / 2 + R * 0.4 + fc * 0.5 - fsw * 0.32 : -L / 2 + R * 1.9;
+    for (const sx of [-1, 1]) { const hs = new T.Mesh(wingGeom(o.rootC * 0.42, o.tipC * 0.55, o.span * 0.34, o.sweep * 0.3, 0.12, sx), o.ttail ? acc : wingM); hs.position.set(sx * (o.ttail ? 0.05 : R * 0.3), hy, hz); hs.castShadow = true; g.add(hs); }
+    // gear
     const gear = new T.Group(); g.add(gear);
-    [[0, 3.6], [-1.1, -0.6], [1.1, -0.6]].forEach(([x, z]) => { gear.add(cyl(0.08, 0.08, 1.0, dark, x, 0.75, z, 6)); const w = cyl(0.32, 0.32, 0.3, dark, x, 0.32, z, 10); w.rotation.z = Math.PI / 2; gear.add(w); });
-    const red = glow(0xff3b30, 1.6), green = glow(0x34c759, 1.6), strobe = glow(0xffffff, 3, 0);
-    red.position.set(-6.6, 1.9, -1.4); green.position.set(6.6, 1.9, -1.4); strobe.position.set(0, 3.0, -0.5); g.add(red, green, strobe);
-    return { g, gear, navs: [red, green], strobe };
-  }
-  function makeB787() {   // the owner's 787-8: longer, raked wingtips, big engines
-    const g = new T.Group(); const body = mat(0xffffff), dark = mat(0x1f2933), eng = mat(0xd0d4da), acc = mat(0x1d3557);
-    const fus = mesh(new T.CylinderGeometry(1.2, 1.2, 13, 22), body, 0, 2.6, 0); fus.rotation.x = Math.PI / 2; g.add(fus);
-    const nose = mesh(new T.SphereGeometry(1.2, 20, 14), body, 0, 2.6, 6.5); nose.scale.z = 1.7; g.add(nose);
-    const tail = mesh(new T.ConeGeometry(1.2, 4, 20), body, 0, 2.8, -8.5); tail.rotation.x = -Math.PI / 2; g.add(tail);
-    const ck = box(1.4, 0.34, 0.6, dark, 0, 3.25, 7.5); ck.rotation.x = -0.4; g.add(ck);
-    [-1, 1].forEach(s => g.add(box(0.04, 0.26, 10.6, dark, s * 1.21, 2.95, 0.6)));
-    g.add(box(1.5, 0.14, 12, acc, 0, 1.55, 0));
-    [-1, 1].forEach(s => {
-      const wing = box(9.4, 0.2, 2.6, body, s * 5.4, 2.0, -0.6); wing.rotation.y = s * 0.45; wing.rotation.z = s * 0.06; g.add(wing);
-      const tip = box(1.6, 0.14, 1.0, body, s * 10.3, 2.45, -3.3); tip.rotation.y = s * 0.9; tip.rotation.z = s * 0.25; g.add(tip);
-      const e = mesh(new T.CylinderGeometry(0.85, 0.72, 3.0, 18), eng, s * 3.7, 1.35, 1.0); e.rotation.x = Math.PI / 2; g.add(e);
-      const hs = box(3.8, 0.12, 1.3, body, s * 2.0, 2.9, -9.2); hs.rotation.y = s * 0.5; g.add(hs);
+    const tyre = mat(0x1f2328);
+    [[0, L / 2 - R * 2.6, 1], [-R * 1.05, wz - 0.4, 2], [R * 1.05, wz - 0.4, 2]].forEach(([x, z, n]) => {
+      gear.add(cyl(0.07, 0.07, Y - R * 0.6, mat(0xc8ccd2), x, (Y - R * 0.6) / 2 + 0.25, z, 6));
+      for (let k = 0; k < n; k++) { const w = cyl(0.3, 0.3, 0.24, tyre, x + (n > 1 ? (k - 0.5) * 0.3 : 0), 0.3, z, 12); w.rotation.z = Math.PI / 2; gear.add(w); }
     });
-    const fs = new T.Shape(); fs.moveTo(0, 0); fs.lineTo(3.6, 0); fs.lineTo(4.6, 4.2); fs.lineTo(3.2, 4.2); fs.closePath();
-    const fin = mesh(new T.ExtrudeGeometry(fs, { depth: 0.2, bevelEnabled: false }), acc, -0.1, 3.4, -6.0); fin.rotation.y = Math.PI / 2; g.add(fin);
-    [[0, 5.6], [-1.6, -1.2], [1.6, -1.2]].forEach(([x, z]) => { g.add(cyl(0.1, 0.1, 1.3, dark, x, 0.95, z, 6)); const w = cyl(0.42, 0.42, 0.5, dark, x, 0.42, z, 10); w.rotation.z = Math.PI / 2; g.add(w); });
-    return g;
+    // lights
+    const strobe = glow(0xffffff, 3, 0); strobe.position.set(0, Y + R + 0.2, 0); g.add(strobe);
+    const land = glow(0xfff6dd, 5, 0); land.position.set(0, Y - R * 0.2, L / 2 + 0.6); g.add(land);
+    const beacon = glow(0xff3b30, 1.5, 0); beacon.position.set(0, Y + R + 0.05, -L * 0.1); g.add(beacon);
+    g.traverse(c => { if (c.isMesh) { c.castShadow = true; } });
+    return { g, gear, navs: g.userData.navs, strobe, land, beacon };
   }
-  function makeGlobal() {  // the owner's Global 8000: T-tail, rear engines, slim
-    const g = new T.Group(); const body = mat(0xffffff), dark = mat(0x1f2933), acc = mat(0x8e6c3a);
-    const fus = mesh(new T.CylinderGeometry(0.75, 0.75, 8.6, 18), body, 0, 1.7, 0); fus.rotation.x = Math.PI / 2; g.add(fus);
-    const nose = mesh(new T.SphereGeometry(0.75, 18, 12), body, 0, 1.7, 4.3); nose.scale.z = 2.0; g.add(nose);
-    const tail = mesh(new T.ConeGeometry(0.75, 2.6, 18), body, 0, 1.85, -5.6); tail.rotation.x = -Math.PI / 2; g.add(tail);
-    const ck = box(0.9, 0.24, 0.5, dark, 0, 2.15, 5.3); ck.rotation.x = -0.45; g.add(ck);
-    [-1, 1].forEach(s => { for (let i = 0; i < 6; i++) g.add(mesh(new T.SphereGeometry(0.12, 8, 6), dark, s * 0.74, 2.0, 2.6 - i * 1.0)); });
-    g.add(box(0.06, 0.1, 8.4, acc, 0.76, 1.55, 0)); g.add(box(0.06, 0.1, 8.4, acc, -0.76, 1.55, 0));
-    [-1, 1].forEach(s => {
-      const wing = box(6.6, 0.14, 1.7, body, s * 3.7, 1.15, -0.3); wing.rotation.y = s * 0.5; wing.rotation.z = s * 0.05; g.add(wing);
-      g.add(box(0.1, 1.1, 0.7, body, s * 6.9, 1.7, -2.2));
-      const e = mesh(new T.CylinderGeometry(0.5, 0.45, 2.0, 14), mat(0xdadde2), s * 1.3, 2.25, -3.4); e.rotation.x = Math.PI / 2; g.add(e);
-      g.add(box(0.7, 0.2, 0.6, body, s * 0.95, 2.1, -3.4));
-    });
-    const fs = new T.Shape(); fs.moveTo(0, 0); fs.lineTo(2.2, 0); fs.lineTo(3.0, 3.0); fs.lineTo(2.0, 3.0); fs.closePath();
-    const fin = mesh(new T.ExtrudeGeometry(fs, { depth: 0.16, bevelEnabled: false }), body, -0.08, 2.2, -4.0); fin.rotation.y = Math.PI / 2; g.add(fin);
-    const ht = box(4.6, 0.12, 1.0, body, 0, 5.2, -6.6); g.add(ht);
-    [[0, 3.5], [-1.0, -0.6], [1.0, -0.6]].forEach(([x, z]) => { g.add(cyl(0.07, 0.07, 0.9, dark, x, 0.7, z, 6)); const w = cyl(0.28, 0.28, 0.26, dark, x, 0.3, z, 10); w.rotation.z = Math.PI / 2; g.add(w); });
-    return g;
+  function makeJet(liveryHex) {
+    return airliner({ len: 12.6, r: 0.88, y: 1.95, livery: liveryHex, engine: 0xdfe3e8, span: 6.1, rootC: 2.6, tipC: 0.75, sweep: 2.3, thick: 0.2, tips: 'winglet', engines: 'wing', er: 0.5, el: 1.9, finH: 2.9, finC: 2.6 });
+  }
+  function makeB787() {   // the owner's 787-8: longer, raked wingtips, big engines, navy livery
+    return airliner({ len: 19, r: 1.25, y: 2.7, livery: 0x1d3557, engine: 0xe3e6ea, span: 9.2, rootC: 3.8, tipC: 0.9, sweep: 3.6, thick: 0.26, tips: 'raked', engines: 'wing', er: 0.82, el: 3.0, finH: 4.4, finC: 3.8, dihedral: 0.09 }).g;
+  }
+  function makeGlobal() {  // the owner's Global 8000: T-tail, rear engines, winglets, gold cheatline
+    return airliner({ len: 11.6, r: 0.78, y: 1.75, livery: 0xa07c3f, engine: 0xf2f2f0, span: 6.6, rootC: 2.4, tipC: 0.6, sweep: 2.6, thick: 0.16, tips: 'winglet', engines: 'rear', er: 0.5, el: 2.1, finH: 2.9, finC: 2.4, ttail: true, wingZ: 0.2, dihedral: 0.05 }).g;
   }
   const fleetObjs = [];
   const FLEET = (opts.fleet && opts.fleet.length ? opts.fleet : [{ reg: 'B787-8', type: 'b787' }, { reg: 'Global 8000', type: 'global' }]).slice(0, 2);
@@ -747,7 +995,7 @@ function mount(container, opts) {
     g.position.set(x, 0, z); g.rotation.y = 0;
     g.traverse(c => { if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; } });
     world.add(g);
-    const tag = signSprite('✈', f.reg, '#64d2ff', 11); tag.position.set(x, f.type === 'global' ? 9 : 11, z - 2); world.add(tag);
+    const tag = signSprite('✈', f.reg, '#64d2ff', 8.5); tag.position.set(x, f.type === 'global' ? 9 : 11, z - 2); world.add(tag);
     pickable(g, { kind: 'fleet', id: f.reg });
     fleetObjs.push({ f, g });
   });
@@ -843,6 +1091,8 @@ function mount(container, opts) {
 
   function makeAircraft(item) {
     const j = makeJet(P.livery[item.type] || 0xff9f0a);
+    const pool = new T.Mesh(new T.PlaneGeometry(9, 16), new T.MeshBasicMaterial({ map: GLOW, color: 0xfff1d0, transparent: true, opacity: 0, depthWrite: false, blending: T.AdditiveBlending }));
+    pool.rotation.x = -Math.PI / 2; pool.position.set(0, 0.25, 13); j.g.add(pool); j.pool = pool;
     world.add(j.g); j.g.visible = false;
     const ac = Object.assign(j, { item, state: 'queued', s: 0, speed: 0, heading: 0, timer: 0, phase: 0 });
     pickable(j.g, { kind: 'flight', id: item.key });
@@ -948,7 +1198,11 @@ function mount(container, opts) {
     ac.gear.scale.y = Math.max(0.01, ac.gearS); ac.gear.visible = ac.gearS > 0.05;
     const airborne = ['approach', 'climb', 'takeoff', 'roll'].includes(ac.state);
     ac.strobe.material.opacity = airborne ? ((SIM.t * 1.3) % 1 < 0.08 ? 1 : 0) : 0;
-    ac.navs.forEach(n => n.material.opacity = 0.2 + ENV.night * 0.8);
+    ac.navs.forEach(n => n.material.opacity = 0.25 + ENV.night * 0.75);
+    const moving = ac.state !== 'onBlock';
+    ac.land.material.opacity = (airborne || ac.state === 'taxiIn' || ac.state === 'taxiOut') ? 0.25 + ENV.night * 0.75 : 0;
+    ac.beacon.material.opacity = moving ? ((SIM.t * 1.1 + 0.4) % 1 < 0.12 ? 1 : 0.08) : 0;
+    if (ac.pool) { ac.pool.material.opacity = (ac.state === 'taxiIn' || ac.state === 'taxiOut' || ac.state === 'roll' || ac.state === 'takeoff') ? ENV.night * 0.55 : 0; }
   }
   function updateVehicle(v, dt) {
     if (v.parts.box) { v.liftY = lerp(v.liftY || 0, v.lift ? 2.6 : 0, 1 - Math.exp(-dt * 1.5)); v.parts.box.position.y = 1.6 + v.liftY; v.parts.stripe.position.y = 1.6 + v.liftY; }
@@ -1027,10 +1281,20 @@ function mount(container, opts) {
     lampMats.forEach(m => m.color.setHex(k > 0.45 ? 0xfff2c8 : 0x8a8a8a));
     beaconM.color.setHex(k > 0.45 ? ((SIM.t % 1.4) < 0.7 ? 0xff453a : 0x5a1a14) : 0xb23a2a);
     floodGlows.forEach(g => g.material.opacity = k * 0.8);
+    beam.material.opacity = 0.04 + k * 0.07;
+    pools.forEach(m => m.material.opacity = k * 0.5);
+    if (edgeGlow) edgeGlow.material.opacity = clamp(k * 1.3 - 0.15, 0, 1);
     stars.material.opacity = clamp(k * 1.2 - 0.2, 0, 1) * (ENV.weather === 'clear' ? 1 : 0.1);
     rain.visible = ENV.weather === 'rain' || ENV.weather === 'storm'; dust.visible = ENV.weather === 'calima';
-    [P.runway, P.taxi, P.apron].forEach(c => { const m = matCache.get(c + '{}'); if (m) m.roughness = lerp(0.82, 0.22, wx.wet); });
-    brainHalo.material.opacity = 0.3 + k * 0.45 + ENV.brainPulse * 0.5;
+    surfMats.forEach(m => { m.roughness = lerp(0.86, 0.2, wx.wet); m.metalness = wx.wet * 0.15; });
+    // sky dome: zenith colour by time of day, horizon = fog colour, sun glow
+    c1.setHex(0x6fa3d8).lerp(c2.setHex(0x050a16), k); c1.lerp(c3.setHex(0x5a6ea8), dusk * 0.5);
+    if (wx.tint) c1.lerp(c2.setHex(wx.tint).multiplyScalar(1 - k * 0.8), 0.7);
+    skyU.top.value.copy(c1); skyU.mid.value.copy(bg); skyU.sunDir.value.copy(sun.position).normalize();
+    skyU.sunCol.value.copy(sun.color); skyU.glowK.value = (1 - k * 0.85) * (ENV.weather === 'clear' ? 1 : 0.3);
+    clouds.mat.color.setHex(0xffffff).lerp(c2.setHex(0x2c3550), k * 0.85); if (wx.tint) clouds.mat.color.lerp(c2.setHex(wx.tint), 0.5);
+    hillMat.color.setHex(0x9db08f).lerp(c2.setHex(0x1c2433), k * 0.6);
+    brainHalo.material.opacity = 0.3 + k * 0.2 + ENV.brainPulse * 0.4;
   }
 
   /* ================================================== CAMERA */
@@ -1056,6 +1320,25 @@ function mount(container, opts) {
     CAM.tween = { from: { t: CAM.target.clone(), d: CAM.dist, az: CAM.az, pol: CAM.pol }, to: { t: t.clone(), d, az: az == null ? CAM.az : az, pol: pol == null ? CAM.pol : pol }, k: 0, start: performance.now(), ms: reduced ? 1 : ms };
   }
   function flyArea(name) { const a = AREAS[name]; if (!a) return; clearSel(); flyTo(V(...a.t), a.d, a.az, a.pol, 1100, null); }
+  // cinematic tour: glide between the most interesting places, drift slowly at each
+  const TOUR = { on: false, i: 0, t: 0 };
+  const TOUR_STOPS = [
+    () => { flyTo(V(TOWER.x, BRAIN_Y, TOWER.z), isPhone ? 95 : 70, CAM.az + 0.6, 1.2, 2600, null); return 9; },
+    () => { const a = SIM.aircraft.find(a => ['approach', 'roll', 'taxiIn', 'taxiOut', 'takeoff'].includes(a.state)); if (!a) return 0; flyTo(followPoint(a.g), isPhone ? 90 : 60, -0.9, 1.0, 2600, a.g); return 10; },
+    () => { flyTo(V(0, 2, -6), isPhone ? 150 : 95, -0.2, 0.9, 2600, null); return 8; },
+    () => { const a = SIM.aircraft.find(a => a.state === 'onBlock'); if (!a) return 0; flyTo(followPoint(a.g), isPhone ? 70 : 48, 0.7, 0.85, 2600, null); return 9; },
+    () => { flyTo(V(HANGAR.x, 2, HANGAR.z + 2), isPhone ? 90 : 62, -1.0, 0.75, 2600, null); return 7; },
+    () => { flyTo(V(-112, 2, -28), isPhone ? 100 : 70, -1.5, 0.95, 2600, null); return 7; },
+    () => { flyTo(V(-40, 9, 14.4), isPhone ? 80 : 56, 0.15, 1.3, 2600, null); return 7; },
+    () => { flyTo(V(-4, 6, -20), isPhone ? 470 : 300, -0.62, 0.9, 3000, null); return 8; }
+  ];
+  function tour(on) { TOUR.on = on; TOUR.t = 0; if (!on) CAM.follow = null; UI && UI.tourState && UI.tourState(on); }
+  function tourTick(dt) {
+    if (!TOUR.on) return;
+    TOUR.t -= dt;
+    if (!CAM.tween) CAM.az += dt * 0.035;
+    if (TOUR.t <= 0) { let tries = 0, d = 0; while (!d && tries++ < TOUR_STOPS.length) { d = TOUR_STOPS[TOUR.i % TOUR_STOPS.length](); TOUR.i++; } TOUR.t = d || 6; }
+  }
   function updateCam(dt) {
     if (CAM.tween) {
       const tw = CAM.tween; tw.k = Math.min(1, (performance.now() - tw.start) / tw.ms); const e = smooth(tw.k);
@@ -1096,6 +1379,7 @@ function mount(container, opts) {
     const pts = new Map();
     el.addEventListener('contextmenu', e => e.preventDefault());
     el.addEventListener('pointerdown', e => {
+      if (TOUR.on) tour(false);
       try { el.setPointerCapture(e.pointerId); } catch (_) {}
       pts.set(e.pointerId, { x: e.clientX, y: e.clientY }); moved = 0;
       if (pts.size === 1) drag = { btn: (e.button === 2 || e.shiftKey || e.altKey) ? 'rot' : 'pan', type: e.pointerType };
@@ -1135,7 +1419,7 @@ function mount(container, opts) {
     };
     el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
     el.addEventListener('wheel', e => {
-      e.preventDefault(); CAM.tween = null;
+      e.preventDefault(); CAM.tween = null; if (TOUR.on) tour(false);
       const before = groundAt(e.clientX, e.clientY);
       CAM.dist = clamp(CAM.dist * Math.exp(e.deltaY * 0.0012), 12, 560); applyCam();
       const after = groundAt(e.clientX, e.clientY);
@@ -1185,6 +1469,11 @@ function mount(container, opts) {
   function select(info) {
     SEL = info; hideTip();
     if (!info) { clearSel(); UI && UI.select(null); return; }
+    if (info.kind === 'board') {
+      const b = boards.find(b => (b.kind === 'dep' ? 'departures' : 'arrivals') === info.id);
+      if (b) flyTo(V(b.grp.position.x, 8, 14.4), isPhone ? 70 : 46, 0.0, 1.32, 900, null);
+      selRing.visible = false; UI && UI.openTab(info.id); return;
+    }
     if (info.kind === 'team') {
       const g = teamOf(info.id); const x = g.id === 'D' ? HANGAR.x : g.x, z = g.id === 'D' ? HANGAR.z + 4 : 3.5;
       flyTo(V(x, 1, z), g.id === 'D' ? 62 : 46, CAM.az, 0.88, 900, null);
@@ -1207,14 +1496,14 @@ function mount(container, opts) {
 
   /* ================================================== LOOP */
   const _o = new T.Object3D();
-  let last = performance.now(), raf = 0, frameAcc = 0, replayClock = 4, hidden = document.hidden;
+  let last = performance.now(), raf = 0, frameAcc = 0, replayClock = 4, hidden = document.hidden, boardClock = 30;
   const minFrame = isPhone ? 1 / 30 : 0;
   const onVis = () => { hidden = document.hidden; if (!hidden) { last = performance.now(); raf = raf || requestAnimationFrame(frame); } };
   document.addEventListener('visibilitychange', onVis);
   function resize() {
     const w = canvas.clientWidth, h = canvas.clientHeight;
     if (!w || !h) return;
-    if (canvas.width !== Math.floor(w * DPR) || canvas.height !== Math.floor(h * DPR)) { renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); }
+    if (canvas.width !== Math.floor(w * DPR) || canvas.height !== Math.floor(h * DPR)) { renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); BR.u.uPx.value = h * DPR / (2 * Math.tan(camera.fov * Math.PI / 360)) * BRAIN_S; }
   }
   function frame(now) {
     raf = 0;
@@ -1257,20 +1546,20 @@ function mount(container, opts) {
     ENV.brainPulse = Math.max(0, ENV.brainPulse - dt * 0.35);
     const tt = SIM.t, spin = reduced ? 0 : tt * 0.18; BR.spin = spin;
     const focusIdx = BR.focus != null ? BR.centers.findIndex(c => String(c.node.id) === String(BR.focus)) : -1;
-    for (let i = 0; i < BR.seeds.length; i++) {
-      const s = BR.seeds[i];
-      const wob = reduced ? 0 : Math.sin(tt * s.sp + s.ph) * 0.05 * (1 + ENV.brainPulse * 2);
-      const cx = s.x * Math.cos(spin) - s.z * Math.sin(spin), cz = s.x * Math.sin(spin) + s.z * Math.cos(spin);
-      _o.position.set(cx * (1 + wob * 0.2), s.y + wob, cz * (1 + wob * 0.2));
-      let sc = s.s * (1 + 0.6 * ENV.brainPulse * (Math.sin(tt * 6 + s.ph) * 0.5 + 0.5));
-      if (s.hot && !reduced) sc *= 1 + 0.35 * (Math.sin(tt * 4 + s.ph) * 0.5 + 0.5);
-      if (focusIdx >= 0 && s.node === focusIdx) sc *= 2.2;
-      _o.scale.setScalar(sc); _o.updateMatrix(); BR.mesh.setMatrixAt(i, _o.matrix);
+    BR.u.uTime.value = tt; BR.u.uPulse.value = ENV.brainPulse; BR.u.uSpin.value = spin; BR.u.uFocus.value = focusIdx; BR.u.uNight.value = ENV.night;
+    if (BR.sig) {
+      const arr = BR.sig.geometry.attributes.position.array, rate = reduced ? 0 : (0.6 + ENV.brainPulse * 1.5 + (ENV.sweepK > 0 ? 0.8 : 0));
+      BR.sigs.forEach((g, i) => {
+        g.t += dt * g.v * rate; if (g.t > 1) { g.t = 0; g.e = Math.floor(Math.random() * BR.sigEdges.length); }
+        const [a, b] = BR.sigEdges[g.e]; arr[i * 3] = a.x + (b.x - a.x) * g.t; arr[i * 3 + 1] = a.y + (b.y - a.y) * g.t; arr[i * 3 + 2] = a.z + (b.z - a.z) * g.t;
+      });
+      BR.sig.geometry.attributes.position.needsUpdate = true; BR.sig.rotation.y = -spin;
+      BR.sig.material.opacity = 0.6 + ENV.night * 0.2;
     }
-    BR.mesh.instanceMatrix.needsUpdate = true;
-    if (BR.edges) { BR.edges.rotation.y = -spin; BR.edges.material.opacity = 0.14 + ENV.brainPulse * 0.3 + ENV.night * 0.1; }
+    if (BR.edges) { BR.edges.rotation.y = -spin; BR.edges.material.opacity = 0.14 + ENV.brainPulse * 0.3 - ENV.night * 0.06; }
     brainHalo.scale.setScalar(12 + Math.sin(tt * 1.4) * 0.6 + ENV.brainPulse * 4);
     padM.opacity = 0.35 + 0.25 * Math.sin(tt * 2) + ENV.brainPulse * 0.3 + (ENV.sweepK > 0 ? 0.2 : 0);
+    clouds.forEach((c, i) => { c.position.x += dt * (1.2 + (i % 3) * 0.4); if (c.position.x > 700) c.position.x -= 1400; });
     // weather
     if (rain.visible) { rain.position.y -= dt * 90; if (rain.position.y < -60) rain.position.y += 60; }
     if (dust.visible) { dust.position.x += dt * 9; if (dust.position.x > 60) dust.position.x -= 60; }
@@ -1281,10 +1570,13 @@ function mount(container, opts) {
     if (SEL && ['flight', 'agent', 'vehicle', 'fleet'].includes(SEL.kind)) {
       const o = objFor(SEL); if (o) { o.getWorldPosition(_np); selRing.position.set(_np.x, Math.max(0.3, _np.y + 0.25), _np.z); selRing.material.opacity = 0.55 + Math.sin(tt * 5) * 0.35; } else selRing.visible = false;
     }
+    tourTick(rawDt);
+    boardClock -= rawDt; if (boardClock <= 0) { boardClock = 30; updateBoards(); }
     updateCam(rawDt);
     renderer.render(scene, camera);
     UI && UI.frame(rawDt);
   }
+  if (!reduced) { CAM.target.set(-30, 0, -40); CAM.dist = 900; CAM.az = -1.7; CAM.pol = 0.62; const a = AREAS.overview; flyTo(V(...a.t), a.d, a.az, a.pol, 4200, null); }
   raf = requestAnimationFrame(frame);
 
   function dispose() {
@@ -1296,7 +1588,7 @@ function mount(container, opts) {
   }
 
   return {
-    flyArea, select, clearSel, objFor, AREAS, SIM, ENV, CAM, people, fleet: fleetObjs, setGraph, onAgents, startSweep, dispose,
+    flyArea, select, clearSel, objFor, AREAS, SIM, ENV, CAM, people, fleet: fleetObjs, setGraph, onAgents, startSweep, dispose, tour, TOUR, updateBoards,
     brainInfo: () => ({ nodes: BR.centers.length, links: BR.edgeCount || 0, hot: BR.centers.filter(c => c.node.hot).length }),
     vanInfo: () => van,
     vehicleOf: id => SIM.vehicles.find(v => v.id === id),
@@ -1317,6 +1609,7 @@ function mount(container, opts) {
       <header class="oa-top oa-glass">
         <div class="oa-brand"><span class="oa-dot" aria-hidden="true"></span><strong>${esc(L.title)}</strong><span class="oa-mode" data-mode></span></div>
         <nav class="oa-areas" aria-label="Areas">
+          <button type="button" class="oa-tour" data-tour aria-pressed="false">${icon('play')}${esc(L.tour)}</button>
           ${['overview', 'gates', 'brain', 'workshop', 'fleet', 'runway'].map(a => `<button type="button" data-area="${a}">${esc(L[a])}</button>`).join('')}
         </nav>
         <div class="oa-tools">
@@ -1342,7 +1635,8 @@ function mount(container, opts) {
     let tab = prefs.tab || 'team', selInfo = null, dirtyFlag = true, tick = 0;
 
     // area buttons
-    $$('[data-area]').forEach(b => b.addEventListener('click', () => { W.flyArea(b.dataset.area); select(null); }));
+    $$('[data-area]').forEach(b => b.addEventListener('click', () => { W.tour(false); W.flyArea(b.dataset.area); select(null); }));
+    $('[data-tour]').addEventListener('click', () => { const on = !W.TOUR.on; if (on) { W.clearSel(); select(null); } W.tour(on); });
     // weather + light
     const wxBtn = $('[data-menu="wx"]'), wxPop = $('[data-pop="wx"]');
     wxBtn.addEventListener('click', e => { e.stopPropagation(); wxPop.hidden = !wxPop.hidden; });
@@ -1377,7 +1671,7 @@ function mount(container, opts) {
     search.addEventListener('keydown', e => { if (e.key === 'Enter') { const b = results.querySelector('[data-hit]'); b && b.click(); } if (e.key === 'Escape') { results.hidden = true; search.blur(); } });
 
     function icon(n) {
-      const p = { cloud: '<path d="M7 18h10a4 4 0 0 0 .6-7.96A6 6 0 0 0 6.1 9.2 4.5 4.5 0 0 0 7 18z"/>', x: '<path d="M6 6l12 12M18 6L6 18"/>', link: '<path d="M10 14a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 10a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/>' }[n];
+      const p = { play: '<path d="M8 5.5v13l10.5-6.5z" fill="currentColor" stroke="none"/>', cloud: '<path d="M7 18h10a4 4 0 0 0 .6-7.96A6 6 0 0 0 6.1 9.2 4.5 4.5 0 0 0 7 18z"/>', x: '<path d="M6 6l12 12M18 6L6 18"/>', link: '<path d="M10 14a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1"/><path d="M14 10a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/>' }[n];
       return `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>`;
     }
 
@@ -1537,6 +1831,7 @@ function mount(container, opts) {
       if (info.kind === 'node') { const n = info.node; return `<b>${esc(n.label)}</b><span>${esc([n.type, n.group, n.stage].filter(Boolean).join(' · '))}</span>${n.hot ? `<span class="oa-pill" data-s="working">${esc(L.hot)}</span>` : ''}`; }
       if (info.kind === 'brain') { const b = W.brainInfo(); return `<b>${esc(L.brainTitle)}</b><span>${b.nodes} ${esc(L.nodes)} · ${b.links} ${esc(L.links)}</span>`; }
       if (info.kind === 'team') return `<b>${esc(L.teams[info.id])}</b><span>${esc(L.teamWhat[info.id])}</span>`;
+      if (info.kind === 'board') { const n = ((D.room || {})[info.id] || []).length; return `<b>${esc(L[info.id])}</b><span>${n} · ${esc(L.open)}</span>`; }
       if (info.kind === 'fleet') { const f = W.fleet.find(f => f.f.reg === info.id); return f ? `<b>${esc(f.f.reg)}</b><span>${esc(f.f.label || '')}</span>` : ''; }
       if (info.kind === 'vehicle') { const v = W.vehicleOf(info.id); return v ? `<b>${esc(L.veh[v.vk])}</b><span>${esc(L.vehWhat[v.vk])}</span>` : ''; }
       return '';
@@ -1561,6 +1856,8 @@ function mount(container, opts) {
     render();
     return {
       render, select, tip: showTip,
+      openTab(t) { tab = t; $('.oa-table').dataset.open = '1'; prefs.tab = t; prefs.tableOpen = true; savePrefs(); renderTable(); },
+      tourState(on) { const b = $('[data-tour]'); b.setAttribute('aria-pressed', on); },
       dirty() { dirtyFlag = true; },
       frame(dt) {
         tick += dt;
@@ -1597,6 +1894,8 @@ function injectCss() {
 .oa *{box-sizing:border-box}
 .oa [hidden]{display:none!important}
 .oa-canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:grab}
+.oa-vignette{position:absolute;inset:0;pointer-events:none;background:radial-gradient(120% 90% at 50% 45%,transparent 55%,rgba(20,30,45,.16) 100%)}
+.oa[data-oa-theme=dark] .oa-vignette{background:radial-gradient(120% 90% at 50% 45%,transparent 50%,rgba(0,0,0,.38) 100%)}
 .oa-ui{position:absolute;inset:0;pointer-events:none;display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-rows:auto auto 1fr auto;gap:10px;padding:12px}
 .oa-ui>*{pointer-events:auto}
 .oa-glass{background:var(--oa-glass);-webkit-backdrop-filter:blur(20px) saturate(1.7);backdrop-filter:blur(20px) saturate(1.7);border:1px solid var(--oa-line);border-radius:16px;box-shadow:var(--oa-shadow)}
@@ -1613,6 +1912,9 @@ function injectCss() {
 .oa-areas::-webkit-scrollbar{display:none}
 .oa-areas button{padding:6px 11px;border-radius:8px;white-space:nowrap;font-weight:500;color:var(--oa-fg2);min-height:32px}
 .oa-areas button:hover{color:var(--oa-fg);background:var(--oa-glass-strong)}
+.oa-tour{display:inline-flex;align-items:center;gap:5px;color:var(--oa-fg)!important;font-weight:600!important}
+.oa-tour svg{width:13px;height:13px}
+.oa-tour[aria-pressed=true]{background:var(--oa-accent)!important;color:#fff!important}
 .oa-tools{display:flex;gap:6px;align-items:center}
 .oa-search{position:relative}
 .oa-search input{width:200px;height:34px;border-radius:10px;border:1px solid var(--oa-line);background:var(--oa-glass-strong);color:var(--oa-fg);padding:0 11px;font:inherit}
