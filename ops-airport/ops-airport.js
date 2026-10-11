@@ -535,7 +535,7 @@ function mount(container, opts) {
     grp.add(box(25.2, 9.8, 0.6, 0x23272e, 0, 9.9, -0.35));
     const face = new T.Mesh(new T.PlaneGeometry(24, 9), new T.MeshBasicMaterial({ map: tex, toneMapped: false })); face.position.set(0, 9.9, 0.0); grp.add(face);
     [-9, 9].forEach(px => grp.add(box(0.5, 1.4, 0.5, 0x5c636d, px, 4.7, -0.3)));
-    world.add(grp); pickable(grp, { kind: 'board', id: kind === 'dep' ? 'departures' : 'arrivals' });
+    grp.scale.setScalar(0.4); grp.position.y = 2.2; world.add(grp); pickable(grp, { kind: 'board', id: kind === 'dep' ? 'departures' : 'arrivals' });
     const b = { kind, c, x: c.getContext('2d'), tex, grp }; boards.push(b); return b;
   }
   const BOARD_TXT = lang === 'es'
@@ -579,7 +579,7 @@ function mount(container, opts) {
   /* ---------- the tower = the brain ----------
      An open platform on top of the tower; the brain floats above it,
      big enough to read from the overview. */
-  const BRAIN_Y = 47, BRAIN_S = 2.3;
+  const BRAIN_Y = 39.5, BRAIN_S = 1.45;
   const brainGroup = new T.Group();
   let radar, radarRing, brainHalo, beaconM, padM, beam;
   const towerG = new T.Group(); towerG.position.set(TOWER.x, 0, TOWER.z);
@@ -718,11 +718,13 @@ function mount(container, opts) {
   const bridges = {};
   AIRPORT_GATES.forEach(g => {
     const grp = new T.Group();
-    grp.add(cyl(1.6, 1.6, 3.2, P.terminal, 0, 2.4, 0, 16));
-    const tube = new T.Group(); tube.position.set(0, 1.55, 0); grp.add(tube);
-    const t = box(2.2, 2.2, 1, 0xe8e3da, 0, 0, 0.5); tube.add(t);
-    const head = box(2.8, 2.6, 2, 0xdcd5c9, 0, 0, 1); tube.add(head);
-    const leg = cyl(0.25, 0.25, 2.6, P.steel, 0, -1.3, 0, 8); tube.add(leg);
+    // jet bridge sized to an A320 door (sill about 3.4 m)
+    grp.add(cyl(0.95, 0.95, 1.5, P.terminal, 0, 1.55, 0, 16));
+    const tube = new T.Group(); tube.position.set(0, 1.5, 0); grp.add(tube);
+    const t = box(1.0, 0.95, 1, 0xd8d4cc, 0, 0, 0.5); tube.add(t);
+    const head = box(1.35, 1.1, 1.0, 0xc9c4ba, 0, 0, 1); tube.add(head);
+    const leg = cyl(0.12, 0.12, 1.4, P.steel, 0, -0.75, 0, 8); tube.add(leg);
+    const wheels = box(0.9, 0.25, 0.4, 0x2a2e34, 0, -1.35, 0); tube.add(wheels); tube.userData.wheels = wheels;
     grp.position.set(g.x - 6.5, 0, -6.2); world.add(grp);
     bridges[g.id] = { tube, t, head, leg, k: 0, target: 0 };
   });
@@ -731,13 +733,13 @@ function mount(container, opts) {
     // rotunda sits at (gx-6.5, -6.2); the forward left door is near (gx-1.0, -17.2)
     const len = lerp(4.5, 11.6, b.k);
     b.tube.rotation.y = Math.PI + lerp(-0.25, -0.46, b.k);
-    b.t.scale.z = len; b.t.position.z = len / 2; b.head.position.z = len + 0.8; b.leg.position.z = len - 1;
+    b.t.scale.z = len; b.t.position.z = len / 2; b.head.position.z = len + 0.5; b.leg.position.z = len - 0.6; b.tube.userData.wheels.position.z = len - 0.6;
   }
 
   /* ---------- signs ---------- */
   function roundRect(x, a, b, w, h, r) { x.beginPath(); x.moveTo(a + r, b); x.arcTo(a + w, b, a + w, b + h, r); x.arcTo(a + w, b + h, a, b + h, r); x.arcTo(a, b + h, a, b, r); x.arcTo(a, b, a + w, b, r); x.closePath(); }
   const signs = [];
-  function signSprite(code, name, color, w = 12.8) {
+  function signSprite(code, name, color, w = 5.6) {
     const c = document.createElement('canvas'); c.width = 640; c.height = 160;
     const x = c.getContext('2d');
     x.fillStyle = '#1c1c1e'; roundRect(x, 6, 6, 628, 148, 30); x.fill();
@@ -750,8 +752,8 @@ function mount(container, opts) {
   }
   AIRPORT_GATES.forEach(g => {
     if (g.id === 'D') return;
-    const s = signSprite(g.id, L.teams[g.team], g.color); s.position.set(g.x - 6, 8.6, -4.5); world.add(s);
-    world.add(cyl(0.12, 0.12, 3.6, P.steel, g.x - 6, 5.6, -4.2, 6));
+    const s = signSprite(g.id, L.teams[g.team], g.color); s.position.set(g.x - 6, 6.6, -4.5); world.add(s);
+    world.add(cyl(0.08, 0.08, 1.6, P.steel, g.x - 6, 5.6, -4.2, 6));
   });
 
   /* ---------- hangar (code workshop) ---------- */
@@ -763,7 +765,7 @@ function mount(container, opts) {
     g.add(box(0.8, H, Dp, P.terminal, -Wd / 2, H / 2, 0)); g.add(box(0.8, H, Dp, P.terminal, Wd / 2, H / 2, 0)); g.add(box(Wd, H, 0.8, P.terminal, 0, H / 2, Dp / 2));
     for (let i = -2; i <= 2; i++) { const rib = mesh(new T.TorusGeometry(Wd / 2, 0.4, 6, 24, Math.PI), mat(P.steel), 0, H, i * 7); rib.scale.y = 0.35; g.add(rib); }
     g.add(box(6, H - 1, 0.6, 0xd2ccc0, -Wd / 2 - 2.6, (H - 1) / 2, -Dp / 2)); g.add(box(6, H - 1, 0.6, 0xd2ccc0, Wd / 2 + 2.6, (H - 1) / 2, -Dp / 2));
-    const s = signSprite('D', L.teams.code, TEAMS[3].color, 14); s.position.set(0, H + 4.5, -Dp / 2); g.add(s);
+    const s = signSprite('D', L.teams.code, TEAMS[3].color, 6.5); s.position.set(0, H + 1.6, -Dp / 2); g.add(s);
     world.add(g);
     pickable(g, { kind: 'team', id: 'code' });
   }
@@ -842,7 +844,7 @@ function mount(container, opts) {
     const legL = new T.Group(), legR = new T.Group(); legL.position.set(-0.22, 0.75, 0); legR.position.set(0.22, 0.75, 0);
     const pants = mat(0x3a4250); legL.add(mesh(limbG, pants, 0, -0.38, 0)); legR.add(mesh(limbG, pants, 0, -0.38, 0)); g.add(legL, legR);
     const cup = mesh(new T.CylinderGeometry(0.12, 0.1, 0.25, 8), mat(0xffffff), 0, -0.85, 0.15); cup.visible = false; armR.add(cup);
-    g.scale.setScalar(0.72);
+    g.scale.setScalar(0.52);
     const bub = { work: bubble('work'), brain: bubble('brain'), coffee: bubble('coffee') };
     Object.values(bub).forEach(b => { b.position.set(0, 3.6, 0); b.visible = false; g.add(b); });
     return { agent, gate, g, armL, armR, legL, legR, head, cup, bub, phase: idx * 1.37, mode: 'desk', path: null, s: 0, wait: 0 };
@@ -1228,6 +1230,64 @@ function mount(container, opts) {
   function makeB787(reg) { return build('b787', { reg }).g; }
   function makeGlobal(reg) { return build('global', { reg }).g; }
   function makeDo228(reg) { return build('do228', { reg }).g; }
+  /* ---------- real models (GLB) ----------
+     Built from FlightGear's GPL aircraft and ground equipment by tools/ac2glb.py.
+     Each loads in the background; until it arrives the drawn model stands in. */
+  const MODEL_BASE = opts.models === false ? null : (opts.models || 'models/');
+  const MODELS = {};
+  function loadGLB(url) {
+    // .glb as binary, or .json holding { glb: base64 } for hosts that do not serve binary model types
+    return fetch(url).then(r => { if (!r.ok) throw new Error(url + ' ' + r.status); return /\.json$/i.test(url) ? r.json().then(j => Uint8Array.from(atob(j.glb), c => c.charCodeAt(0)).buffer) : r.arrayBuffer(); }).then(async buf => {
+      const dv = new DataView(buf); if (dv.getUint32(0, true) !== 0x46546C67) throw new Error('not glb');
+      const jl = dv.getUint32(12, true), json = JSON.parse(new TextDecoder().decode(new Uint8Array(buf, 20, jl)));
+      const bo = 20 + jl + 8, bin = buf.slice(bo, bo + dv.getUint32(20 + jl, true));
+      const CT = { 5126: Float32Array, 5123: Uint16Array, 5125: Uint32Array }, NC = { SCALAR: 1, VEC2: 2, VEC3: 3, VEC4: 4 };
+      const acc = i => { const a = json.accessors[i], bv = json.bufferViews[a.bufferView], C = CT[a.componentType]; return new T.BufferAttribute(new C(bin, (bv.byteOffset || 0) + (a.byteOffset || 0), a.count * NC[a.type]), NC[a.type]); };
+      const tex = await Promise.all((json.images || []).map(async im => {
+        const bv = json.bufferViews[im.bufferView], blob = new Blob([new Uint8Array(bin, bv.byteOffset, bv.byteLength)], { type: im.mimeType });
+        const img = await (window.createImageBitmap ? createImageBitmap(blob) : new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = no; i.src = URL.createObjectURL(blob); }));
+        const t = new T.Texture(img); t.flipY = false; if ('colorSpace' in t) t.colorSpace = T.SRGBColorSpace; t.anisotropy = Math.min(8, maxAniso); t.needsUpdate = true; return t;
+      }));
+      const mats = (json.materials || []).map(m => {
+        const pb = m.pbrMetallicRoughness || {}, c = pb.baseColorFactor || [1, 1, 1, 1];
+        const mt = new T.MeshStandardMaterial({ color: new T.Color(c[0], c[1], c[2]), roughness: pb.roughnessFactor ?? 0.6, metalness: pb.metallicFactor ?? 0, side: m.doubleSided ? T.DoubleSide : T.FrontSide });
+        if (pb.baseColorTexture) mt.map = tex[json.textures[pb.baseColorTexture.index].source];
+        if (m.alphaMode === 'MASK') { mt.alphaTest = m.alphaCutoff ?? 0.5; mt.transparent = false; }
+        if (m.alphaMode === 'BLEND' || c[3] < 0.99) { mt.transparent = true; mt.opacity = c[3]; mt.depthWrite = false; }
+        if (m.emissiveFactor) mt.emissive = new T.Color(...m.emissiveFactor);
+        mt.userData = m.extras || {};
+        if (mt.userData.part === 'body' && mt.map) { mt.roughness = 0.34; mt.envMapIntensity = 1.1; }
+        return mt;
+      });
+      const g = new T.Group();
+      json.meshes[0].primitives.forEach(pr => {
+        const geo = new T.BufferGeometry();
+        geo.setAttribute('position', acc(pr.attributes.POSITION)); geo.setAttribute('normal', acc(pr.attributes.NORMAL));
+        if (pr.attributes.TEXCOORD_0 != null) geo.setAttribute('uv', acc(pr.attributes.TEXCOORD_0));
+        geo.setIndex(acc(pr.indices)); geo.computeBoundingSphere();
+        const mt = mats[pr.material], m = new T.Mesh(geo, mt);
+        m.userData.part = (mt.userData && mt.userData.part) || 'body';
+        m.castShadow = !mt.transparent; m.receiveShadow = true;
+        if (m.userData.part === 'cabin') { m.visible = false; mt.emissive = new T.Color(0xffd9a0); mt.emissiveIntensity = 0; }
+        g.add(m);
+      });
+      g.userData.box = new T.Box3().setFromObject(g);
+      return g;
+    });
+  }
+  function model(name) {
+    if (!MODEL_BASE) return Promise.reject(new Error('models off'));
+    if (!MODELS[name]) { MODELS[name] = loadGLB(MODEL_BASE + name + (opts.modelExt || '.glb')); MODELS[name].catch(e => console.warn('[ops-airport] model', name, e.message)); }
+    return MODELS[name];
+  }
+  // replace a drawn stand-in with the real model, keeping the group (and its picking) in place
+  function swapIn(group, name, keep = []) {
+    return model(name).then(m => {
+      if (!alive.on) return null;
+      [...group.children].forEach(c => { if (!keep.includes(c)) group.remove(c); });
+      const inst = m.clone(true); group.add(inst); group.userData.real = inst; return inst;
+    }).catch(() => null);
+  }
   const fleetObjs = [];
   const FLEET = (opts.fleet && opts.fleet.length ? opts.fleet : [{ reg: '787-8', type: 'b787', label: 'Boeing 787-8' }, { reg: 'G8000', type: 'global', label: 'Bombardier Global 8000' }, { reg: '228NXT', type: 'do228', label: 'Dornier 228 NXT' }]).slice(0, 3);
   const FLEET_SPOT = { b787: [-100, -28], global: [-124, -26], do228: [-82, -31] };
@@ -1238,9 +1298,10 @@ function mount(container, opts) {
     g.position.set(x, 0, z);
     g.traverse(c => { if (c.isMesh && !c.material.transparent) { c.castShadow = true; c.receiveShadow = true; } });
     world.add(g);
-    const tag = signSprite('✈', f.reg, '#E07B24', f.type === 'do228' ? 6 : 8); tag.position.set(x, f.type === 'b787' ? 11 : f.type === 'global' ? 8 : 5, z - 2); world.add(tag);
+    const tag = signSprite('✈', f.reg, '#E07B24', 4.2); tag.position.set(x, f.type === 'b787' ? 8 : f.type === 'global' ? 4.6 : 3.6, z); world.add(tag);
     pickable(g, { kind: 'fleet', id: f.reg });
     fleetObjs.push({ f, g });
+    swapIn(g, f.model || f.type);
   });
 
   /* ================================================== THE COAST
@@ -1314,7 +1375,7 @@ function mount(container, opts) {
     for (let xx = PORT.x0 + 4.5; xx < PORT.x1; xx += 4.5) g.add(box(0.4, 0.35, d, P.roof, xx, QUAY.top + 4.1, cz));
     g.add(box(w, 0.4, 0.55, 0x2f6e8e, cx, QUAY.top + 3.6, PORT.z0 - 0.02));
     world.add(g);
-    const sg = signSprite('S', L.teams.ship, '#2F6E8E', 13); sg.position.set(cx, QUAY.top + 8.5, PORT.z0); world.add(sg);
+    const sg = signSprite('S', L.teams.ship, '#2F6E8E', 5.6); sg.position.set(cx, QUAY.top + 5.6, PORT.z0); world.add(sg);
     pickable(g, { kind: 'team', id: 'ship' });
   }
   /* ---------- the rescue vessel (66 m, 15 m beam, drawn to the fleet sheet) ---------- */
@@ -1376,7 +1437,7 @@ function mount(container, opts) {
     const sh = makeRescueShip();
     shipObj = new T.Group(); shipObj.add(sh); shipObj.position.set(SHIP_POS.x, SEA_Y, SHIP_POS.z); world.add(shipObj);
     pickable(shipObj, { kind: 'vessel', id: 'vessel' });
-    const tg = signSprite('⚓', SHIP.name, '#2F6E8E', 10); tg.position.set(SHIP_POS.x, 15, SHIP_POS.z); world.add(tg);
+    const tg = signSprite('⚓', SHIP.name, '#2F6E8E', 4.6); tg.position.set(SHIP_POS.x, 13, SHIP_POS.z); world.add(tg);
   }
   /* ---------- ground vehicles ---------- */
   function makeVehicle(kind) {
@@ -1436,9 +1497,11 @@ function mount(container, opts) {
   for (let i = 0; i < 4; i++) { const v = makeVehicle('car'); v.path = roadMain; v.s = i * roadMain._len / 4; v.speed = v.max; v.loop = true; v.through = true; cars.push(v); }
 
   // Jarvis's van
+  // real ground equipment replaces the drawn trucks once loaded
+  SIM.vehicles.forEach(v => { const nm = { tug: 'tug', fuel: 'fuel', cater: 'cater', bag: 'tug' }[v.kind]; if (nm) swapIn(v.g, nm).then(i => { if (i) { v.parts = {}; } }); });
   const van = makeVehicle('van');
   van.path = roundedPath([[-94, -12.6], [82, -12.6], [82, -2.4], [-94, -2.4], [-94, -12.6]], 5, 0);
-  van.loop = true; van.id = 'jarvis-van'; van.vk = 'van'; SIM.vehicles.push(van); pickable(van.g, { kind: 'vehicle', id: 'jarvis-van' });
+  van.loop = true; van.id = 'jarvis-van'; van.vk = 'van'; SIM.vehicles.push(van); swapIn(van.g, 'followme', [van.parts.beacon]); pickable(van.g, { kind: 'vehicle', id: 'jarvis-van' });
   van.path = roundedPath([[-94, -12.6], [80, -12.6], [80, -15.5], [-94, -15.5], [-94, -12.6]], 1.4, 0);
 
   function arrivalPaths(st) {
@@ -1473,6 +1536,17 @@ function mount(container, opts) {
     pool.rotation.x = -Math.PI / 2; pool.position.set(0, 0.25, 13); j.g.add(pool); j.pool = pool;
     world.add(j.g); j.g.visible = false;
     const ac = Object.assign(j, { item, state: 'queued', s: 0, speed: 0, heading: 0, timer: 0, phase: 0 });
+    // the real A320 replaces the drawn one; lights move to its wingtips, gear meshes retract in flight
+    swapIn(j.g, 'a320', [pool]).then(inst => {
+      if (!inst) return;
+      const bb = inst.userData.box || new T.Box3().setFromObject(inst), sx = bb.max.x, top = bb.max.y;
+      const red = glow(0xff3b30, 0.75), green = glow(0x34c759, 0.75), strobe = glow(0xffffff, 3, 0), land = glow(0xfff6dd, 5, 0), beacon = glow(0xff3b30, 1.4, 0);
+      red.position.set(sx * 0.99, 2.1, -1.6); green.position.set(-sx * 0.99, 2.1, -1.6); strobe.position.set(0, top * 0.55, -0.5); land.position.set(0, 0.9, bb.max.z + 0.4); beacon.position.set(0, top * 0.42, -1);
+      j.g.add(red, green, strobe, land, beacon);
+      ac.navs = [red, green]; ac.strobe = strobe; ac.land = land; ac.beacon = beacon; ac.cabin = null;
+      ac.gearMeshes = []; inst.traverse(c => { if (c.isMesh && c.userData.part === 'gear') ac.gearMeshes.push(c); });
+      ac.gear = new T.Group();
+    });
     pickable(j.g, { kind: 'flight', id: item.key });
     return ac;
   }
@@ -1575,6 +1649,7 @@ function mount(container, opts) {
     }
     const gk = ac.gearK === undefined ? 1 : ac.gearK; ac.gearS = lerp(ac.gearS === undefined ? 1 : ac.gearS, gk, 1 - Math.exp(-dt * 3));
     ac.gear.scale.y = Math.max(0.01, ac.gearS); ac.gear.visible = ac.gearS > 0.05;
+    if (ac.gearMeshes) { const gv = ac.gearS > 0.5; if (ac.gearMeshes[0] && ac.gearMeshes[0].visible !== gv) ac.gearMeshes.forEach(m => m.visible = gv); }
     const airborne = ['approach', 'climb', 'takeoff', 'roll'].includes(ac.state);
     ac.strobe.material.opacity = airborne ? ((SIM.t * 1.3) % 1 < 0.08 ? 1 : 0) : 0;
     ac.navs.forEach(n => { n.material.opacity = 0.15 + ENV.night * 0.85; n.scale.setScalar(0.75 + ENV.night * 1.2); });
@@ -1769,7 +1844,7 @@ function mount(container, opts) {
     () => { flyTo(V(-112, 2, -28), isPhone ? 100 : 70, -1.5, 0.95, 2600, null); return 7; },
     () => { flyTo(V(SHIP_POS.x + 6, 4, SHIP_POS.z), isPhone ? 110 : 70, 0.35, 1.05, 2800, null); return 8; },
     () => { const b = SIM.boats.find(b => b.state === 'inbound' || b.state === 'outbound'); if (!b) return 0; flyTo(followPoint(b.g), isPhone ? 60 : 40, -0.6, 1.0, 2600, b.g); return 8; },
-    () => { flyTo(V(-40, 9, 14.4), isPhone ? 80 : 56, 0.15, 1.3, 2600, null); return 7; },
+    () => { flyTo(V(-40, 6.2, 14.4), isPhone ? 40 : 26, 0.15, 1.36, 2600, null); return 7; },
     () => { flyTo(V(-4, 6, -20), isPhone ? 470 : 300, -0.62, 0.9, 3000, null); return 8; }
   ];
   function tour(on) { TOUR.on = on; TOUR.t = 0; if (!on) CAM.follow = null; UI && UI.tourState && UI.tourState(on); }
@@ -1912,7 +1987,7 @@ function mount(container, opts) {
     if (!info) { clearSel(); UI && UI.select(null); return; }
     if (info.kind === 'board') {
       const b = boards.find(b => (b.kind === 'dep' ? 'departures' : 'arrivals') === info.id);
-      if (b) flyTo(V(b.grp.position.x, 8, 14.4), isPhone ? 70 : 46, 0.0, 1.32, 900, null);
+      if (b) flyTo(V(b.grp.position.x, 6.2, 14.4), isPhone ? 32 : 20, 0.0, 1.38, 900, null);
       selRing.visible = false; UI && UI.openTab(info.id); return;
     }
     if (info.kind === 'vessel') { flyTo(V(SHIP_POS.x, 4, SHIP_POS.z), isPhone ? 95 : 58, CAM.az, 1.02, 900, null); selRing.visible = false; UI && UI.select(info); return; }
@@ -2024,7 +2099,7 @@ function mount(container, opts) {
       const o = objFor(SEL); if (o) { o.getWorldPosition(_np); selRing.position.set(_np.x, Math.max(0.3, _np.y + 0.25), _np.z); selRing.material.opacity = 0.55 + Math.sin(tt * 5) * 0.35; } else selRing.visible = false;
     }
     tourTick(rawDt);
-    signs.forEach(sg => { sg.getWorldPosition(_np); const d = _np.distanceTo(camera.position); sg.material.opacity = clamp((d - 38) / 30, 0, 1); sg.visible = sg.material.opacity > 0.02; });
+    signs.forEach(sg => { sg.getWorldPosition(_np); const d = _np.distanceTo(camera.position); sg.material.opacity = clamp((d - 24) / 20, 0, 1); sg.visible = sg.material.opacity > 0.02; });
     boardClock -= rawDt; if (boardClock <= 0) { boardClock = 30; updateBoards(); }
     updateCam(rawDt);
     renderer.render(scene, camera);

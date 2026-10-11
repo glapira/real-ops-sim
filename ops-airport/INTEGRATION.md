@@ -80,3 +80,9 @@ No AI calls and no extra polling. It renders at up to 30 fps on phones and stops
 ## Licence
 
 Everything here is written from scratch: geometry, people, aircraft, brain and UI. Nothing is copied from agents-office or deskrpg. The only dependency is three.js (MIT).
+
+## Real aircraft and ground equipment
+
+The page loads real models from `models/` (pass `models: 'app/ops-airport/models/'` or wherever you copy them, or `models: false` to keep the drawn ones). They come from FlightGear's GPL aircraft: the 787-8, A320, CRJ700 (standing in for the Global 8000), Dornier 228, the Volvo fuel and catering trucks, the pushback tug and the Follow-Me car. `models/README.md` lists sources and authors. Each model loads in the background and replaces the drawn stand-in when it arrives. The whole set is about 13 MB, cached by the browser after the first visit.
+
+The Solidaire livery is painted onto each model's own texture by `tools/build_models.py`, so it sits on the real panel lines, doors and windows. To change the livery or registrations, edit that script and rebuild.
