@@ -81,7 +81,9 @@ No AI calls and no extra polling. It renders at up to 30 fps on phones and stops
 
 ## Licence
 
-Everything here is written from scratch: geometry, people, aircraft, brain and UI. Nothing is copied from agents-office or deskrpg. The only dependency is three.js (MIT).
+The code in `ops-airport.js` is written from scratch. Nothing is copied from agents-office or deskrpg. three.js is MIT, and the water and sky shaders are adapted from its examples (MIT, see `textures/THREE-LICENSE.txt`).
+
+The aircraft, vehicles and most surface textures come from FlightGear and are GPL v2 or later. Sources and authors are in `models/README.md` and `textures/README.md`. Using them inside your own app is fine. If you ever ship AeroLedger to other people, keep those READMEs with the files and offer the sources, or pass `models: false` and `textures: false` to fall back to the drawn versions.
 
 ## Real aircraft and ground equipment
 
