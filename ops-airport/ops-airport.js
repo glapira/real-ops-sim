@@ -504,11 +504,58 @@ function mount(container, opts) {
   }
 
   /* ---------- sky dome, hills and clouds ---------- */
-  const skyU = { top: { value: new T.Color(0x8fb7dc) }, mid: { value: new T.Color(0xe3ebf0) }, sunDir: { value: new T.Vector3(0.5, 0.5, 0.5) }, sunCol: { value: new T.Color(0xfff1dc) }, glowK: { value: 0.4 } };
+  const skyU = { top: { value: new T.Color(0x8fb7dc) }, mid: { value: new T.Color(0xe3ebf0) }, sunDir: { value: new T.Vector3(0.5, 0.5, 0.5) }, sunCol: { value: new T.Color(0xfff1dc) }, glowK: { value: 0.4 },
+    turbidity: { value: 3.2 }, rayleigh: { value: 1.4 }, mieCoefficient: { value: 0.004 }, mieDirectionalG: { value: 0.82 }, sunPosition: { value: new T.Vector3(0, 1, 0) }, up: { value: new T.Vector3(0, 1, 0) },
+    dayK: { value: 1 }, overcast: { value: 0 }, overcastCol: { value: new T.Color(0xb8c0c8) }, skyGain: { value: 0.55 } };
+  // Preetham daylight model adapted from three.js examples/jsm/objects/Sky.js (MIT); blended with a gradient for dusk, night and cloud cover
   const sky = new T.Mesh(new T.SphereGeometry(1600, 32, 16), new T.ShaderMaterial({
     uniforms: skyU, side: T.BackSide, depthWrite: false, fog: false,
-    vertexShader: 'varying vec3 vDir; void main(){ vDir = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
-    fragmentShader: 'uniform vec3 top; uniform vec3 mid; uniform vec3 sunDir; uniform vec3 sunCol; uniform float glowK; varying vec3 vDir; void main(){ float h = clamp(vDir.y, 0.0, 1.0); vec3 c = mix(mid, top, pow(h, 0.55)); float s = max(dot(normalize(vDir), normalize(sunDir)), 0.0); c += sunCol * (pow(s, 24.0) * 0.6 + pow(s, 4.0) * 0.18) * glowK; gl_FragColor = vec4(c, 1.0); }'
+    vertexShader: `uniform vec3 sunPosition; uniform float rayleigh, turbidity, mieCoefficient; uniform vec3 up;
+      varying vec3 vWorldPosition, vSunDirection, vBetaR, vBetaM; varying float vSunfade, vSunE; varying vec3 vDir;
+      const float e = 2.71828182845904523536028747135266249775724709369995957;
+      const vec3 totalRayleigh = vec3(5.804542996261093E-6, 1.3562911419845635E-5, 3.0265902468824876E-5);
+      const vec3 MieConst = vec3(1.8399918514433978E14, 2.7798023919660528E14, 4.0790479543861094E14);
+      const float cutoffAngle = 1.6110731556870734, steepness = 1.5, EE = 1000.0;
+      float sunIntensity(float c) { c = clamp(c, -1.0, 1.0); return EE * max(0.0, 1.0 - pow(e, -((cutoffAngle - acos(c)) / steepness))); }
+      vec3 totalMie(float T) { float c = (0.2 * T) * 10E-18; return 0.434 * c * MieConst; }
+      void main() { vec4 wp = modelMatrix * vec4(position, 1.0); vWorldPosition = wp.xyz; vDir = normalize(position);
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); gl_Position.z = gl_Position.w;
+        vSunDirection = normalize(sunPosition); vSunE = sunIntensity(dot(vSunDirection, up));
+        vSunfade = 1.0 - clamp(1.0 - exp((sunPosition.y / 450000.0)), 0.0, 1.0);
+        float rc = rayleigh - (1.0 * (1.0 - vSunfade)); vBetaR = totalRayleigh * rc; vBetaM = totalMie(turbidity) * mieCoefficient; }`,
+    fragmentShader: `varying vec3 vWorldPosition, vSunDirection, vBetaR, vBetaM, vDir; varying float vSunfade, vSunE;
+      uniform float mieDirectionalG, dayK, overcast, skyGain; uniform vec3 up, top, mid, sunDir, sunCol, overcastCol; uniform float glowK;
+      const float pi = 3.141592653589793; const float rayleighZenithLength = 8.4E3, mieZenithLength = 1.25E3;
+      const float sunAngularDiameterCos = 0.999956676946448443553574619906976478926848692873900859324;
+      const float THREE_OVER_SIXTEENPI = 0.05968310365946075, ONE_OVER_FOURPI = 0.07957747154594767;
+      float rayleighPhase(float c) { return THREE_OVER_SIXTEENPI * (1.0 + pow(c, 2.0)); }
+      float hgPhase(float c, float g) { float g2 = pow(g, 2.0); float inv = 1.0 / pow(1.0 - 2.0 * g * c + g2, 1.5); return ONE_OVER_FOURPI * ((1.0 - g2) * inv); }
+      void main() {
+        vec3 direction = normalize(vWorldPosition - cameraPosition);
+        float zenithAngle = acos(max(0.0, dot(up, direction)));
+        float inverse = 1.0 / (cos(zenithAngle) + 0.15 * pow(93.885 - ((zenithAngle * 180.0) / pi), -1.253));
+        float sR = rayleighZenithLength * inverse, sM = mieZenithLength * inverse;
+        vec3 Fex = exp(-(vBetaR * sR + vBetaM * sM));
+        float cosTheta = dot(direction, vSunDirection);
+        vec3 betaRTheta = vBetaR * rayleighPhase(cosTheta * 0.5 + 0.5), betaMTheta = vBetaM * hgPhase(cosTheta, mieDirectionalG);
+        vec3 Lin = pow(vSunE * ((betaRTheta + betaMTheta) / (vBetaR + vBetaM)) * (1.0 - Fex), vec3(1.5));
+        Lin *= mix(vec3(1.0), pow(vSunE * ((betaRTheta + betaMTheta) / (vBetaR + vBetaM)) * Fex, vec3(1.0 / 2.0)), clamp(pow(1.0 - dot(up, vSunDirection), 5.0), 0.0, 1.0));
+        vec3 L0 = vec3(0.1) * Fex;
+        float sundisk = smoothstep(sunAngularDiameterCos, sunAngularDiameterCos + 0.00002, cosTheta);
+        L0 += (vSunE * 19000.0 * Fex) * sundisk;
+        vec3 texColor = (Lin + L0) * 0.04 + vec3(0.0, 0.0003, 0.00075);
+        vec3 day = pow(texColor, vec3(1.0 / (1.2 + (1.2 * vSunfade)))) * skyGain;
+        // below the horizon fade to the haze colour so the far sea and hills sit inside the sky
+        float h = clamp(direction.y, -1.0, 1.0);
+        vec3 grad = mix(mid, top, pow(clamp(h, 0.0, 1.0), 0.55));
+        float s = max(dot(direction, normalize(sunDir)), 0.0); grad += sunCol * (pow(s, 24.0) * 0.6 + pow(s, 4.0) * 0.18) * glowK;
+        vec3 c = mix(grad, day, dayK);
+        c = mix(c, mix(overcastCol, grad, 0.25), overcast);
+        c = mix(c, mid, smoothstep(0.06, -0.02, h));
+        gl_FragColor = vec4(c, 1.0);
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
+      }`
   }));
   sky.renderOrder = -10; scene.add(sky);
   const hillMat = new T.MeshStandardMaterial({ color: 0x9db08f, roughness: 1, flatShading: true });
@@ -526,12 +573,24 @@ function mount(container, opts) {
   }
   const clouds = [];
   {
-    const cg = new T.IcosahedronGeometry(1, 1), cm = new T.MeshStandardMaterial({ color: 0xffffff, roughness: 1, flatShading: true, transparent: true, opacity: 0.95 });
-    for (let i = 0; i < 14; i++) {
-      const grp = new T.Group(); const n = 4 + Math.floor(Math.random() * 4);
-      for (let k = 0; k < n; k++) { const m = new T.Mesh(cg, cm); const sz = 9 + Math.random() * 12; m.scale.set(sz * 1.4, sz * 0.7, sz); m.position.set((k - n / 2) * 11 + Math.random() * 6, Math.random() * 5, Math.random() * 10 - 5); grp.add(m); }
-      const a = Math.random() * Math.PI * 2, r = 330 + Math.random() * 260;
-      grp.position.set(Math.cos(a) * r, 70 + Math.random() * 70, Math.sin(a) * r - 60); world.add(grp); clouds.push(grp);
+    // soft cumulus: a painted puff texture on clustered billboards, lit by the sun colour
+    const c = document.createElement('canvas'); c.width = c.height = 256; const x = c.getContext('2d'); const rr = seeded(11);
+    for (let i = 0; i < 46; i++) {
+      const px = 128 + (rr() - 0.5) * 120, py = 140 + (rr() - 0.5) * 60 - Math.abs(px - 128) * 0.25, rad = 26 + rr() * 46;
+      const g = x.createRadialGradient(px, py - rad * 0.25, rad * 0.1, px, py, rad);
+      g.addColorStop(0, 'rgba(255,255,255,0.55)'); g.addColorStop(0.55, 'rgba(244,246,250,0.28)'); g.addColorStop(1, 'rgba(230,235,242,0)');
+      x.fillStyle = g; x.beginPath(); x.arc(px, py, rad, 0, Math.PI * 2); x.fill();
+    }
+    const sh = x.createLinearGradient(0, 120, 0, 230); sh.addColorStop(0, 'rgba(120,130,150,0)'); sh.addColorStop(1, 'rgba(120,130,150,0.35)');
+    x.globalCompositeOperation = 'source-atop'; x.fillStyle = sh; x.fillRect(0, 0, 256, 256);
+    const tex = new T.CanvasTexture(c); if ('colorSpace' in tex) tex.colorSpace = T.SRGBColorSpace;
+    const cm = new T.SpriteMaterial({ map: tex, color: 0xffffff, transparent: true, depthWrite: false, fog: true, opacity: 0.95 });
+    const rnd = seeded(23);
+    for (let i = 0; i < 26; i++) {
+      const grp = new T.Group(); const n = 5 + Math.floor(rnd() * 6), w = 40 + rnd() * 50;
+      for (let k = 0; k < n; k++) { const sp = new T.Sprite(cm); const sz = w * (0.45 + rnd() * 0.45); sp.scale.set(sz, sz * 0.62, 1); sp.position.set((rnd() - 0.5) * w * 1.2, (rnd() - 0.3) * w * 0.18, (rnd() - 0.5) * w * 0.5); grp.add(sp); }
+      const a = rnd() * Math.PI * 2, rad = 260 + rnd() * 520;
+      grp.position.set(Math.cos(a) * rad, 90 + rnd() * 90, Math.sin(a) * rad - 80); world.add(grp); clouds.push(grp);
     }
     clouds.mat = cm;
   }
@@ -567,6 +626,30 @@ function mount(container, opts) {
   const approachGlows = [];
   for (let i = 1; i <= 7; i++) { const s = glow(0xfff1c8, 4, 0); s.position.set(-156 - i * 7, 0.6, RWY_Z); world.add(s); approachGlows.push(s); }
 
+  /* ---------- curtain wall: glass panels with mullions; at night a share of the panels glow ---------- */
+  const facade = (() => {
+    const W = 2048, Hh = 256, cols = 80, rows = 4;
+    const mk = () => { const c = document.createElement('canvas'); c.width = W; c.height = Hh; return c; };
+    const cm = mk(), ce = mk(), x = cm.getContext('2d'), e = ce.getContext('2d');
+    const rnd = seeded(5);
+    e.fillStyle = '#000'; e.fillRect(0, 0, W, Hh);
+    const pw = W / cols, ph = Hh / rows;
+    for (let i = 0; i < cols; i++) for (let j = 0; j < rows; j++) {
+      const g = x.createLinearGradient(0, j * ph, 0, (j + 1) * ph); const t = 0.45 + rnd() * 0.25;
+      g.addColorStop(0, `rgb(${120 * t + 60},${150 * t + 70},${170 * t + 75})`); g.addColorStop(1, `rgb(${60 * t + 30},${80 * t + 40},${95 * t + 45})`);
+      x.fillStyle = g; x.fillRect(i * pw, j * ph, pw, ph);
+      x.fillStyle = 'rgba(255,255,255,0.10)'; x.beginPath(); x.moveTo(i * pw, j * ph); x.lineTo(i * pw + pw * 0.55, j * ph); x.lineTo(i * pw, j * ph + ph * 0.8); x.fill();
+      if (rnd() < (j === 0 ? 0.75 : 0.42)) { const w = 0.45 + rnd() * 0.55, cool = rnd() < 0.3; e.fillStyle = cool ? `rgb(${200 * w | 0},${215 * w | 0},${235 * w | 0})` : `rgb(${255 * w | 0},${214 * w | 0},${165 * w | 0})`; e.fillRect(i * pw + 2, j * ph + 2, pw - 4, ph - 4); }
+    }
+    x.fillStyle = '#c9ccd0'; e.fillStyle = '#000';
+    for (let i = 0; i <= cols; i++) { x.fillRect(i * pw - 1.5, 0, 3, Hh); e.fillRect(i * pw - 2, 0, 4, Hh); }
+    for (let j = 0; j <= rows; j++) { x.fillRect(0, j * ph - 2, W, 4); e.fillRect(0, j * ph - 2, W, 4); }
+    const tex = c => { const t = new T.CanvasTexture(c); if ('colorSpace' in t) t.colorSpace = T.SRGBColorSpace; t.wrapS = t.wrapT = T.RepeatWrapping; t.anisotropy = Math.min(8, maxAniso); return t; };
+    const map = tex(cm), em = tex(ce);
+    return (repX, repY) => { repX /= 5; const m = new T.MeshPhysicalMaterial({ map: map.clone(), emissiveMap: em.clone(), emissive: 0xffd9a8, emissiveIntensity: 0, roughness: 0.12, metalness: 0.35, clearcoat: 1 });
+      [m.map, m.emissiveMap].forEach(t => { t.needsUpdate = true; t.repeat.set(repX, repY); }); windowMats.push(m); return m; };
+  })();
+
   /* ---------- terminal wings (cut-away roof) ---------- */
   const windowMats = [];
   function terminalWing(x0, x1) {
@@ -577,15 +660,13 @@ function mount(container, opts) {
     g.add(box(w + 1, 0.3, 3.4, P.roof, cx, 4.95, -5.3));                                   // airside canopy
     g.add(box(w, 0.4, 0.66, 0xff9f0a, cx, 4.3, 13.72));                                     // brand band on the landside wall
     for (let x = x0 + 1; x < x1; x += 4) g.add(box(0.25, 3.4, 0.5, 0xd8d2c7, x, 2.4, 14.1)); // facade fins
-    g.add(box(w, 4.2, 0.6, P.terminal, cx, 2.4, 13.7));
-    const glassM = new T.MeshStandardMaterial({ color: P.glass, transparent: true, opacity: 0.28, roughness: 0.1, metalness: 0.1 });
+    g.add(mesh(new T.BoxGeometry(w, 4.2, 0.4), facade(w / 12, 1), cx, 2.4, 13.7));
+    const glassM = new T.MeshPhysicalMaterial({ color: 0x9fbccc, transparent: true, opacity: 0.32, roughness: 0.05, metalness: 0.2, clearcoat: 1 });
     g.add(mesh(new T.BoxGeometry(w, 3.6, 0.2), glassM, cx, 2.4, -3.8, false, false));
     for (let x = x0; x <= x1 + 0.01; x += 6) g.add(box(0.35, 4.2, 0.35, P.steel, x, 2.4, -3.8));
     g.add(box(w, 0.5, 0.8, P.roof, cx, 4.6, -3.7)); g.add(box(w, 0.5, 0.8, P.roof, cx, 4.6, 13.7));
-    [x0, x1].forEach(x => g.add(box(0.6, 4.2, 18, P.terminal, x, 2.4, 5)));
     for (let x = x0 + 6; x < x1 - 1; x += 12) g.add(box(0.5, 0.4, 18, P.roof, x, 4.8, 5));
-    const winM = new T.MeshStandardMaterial({ color: 0x334455, emissive: 0xffc777, emissiveIntensity: 0, roughness: 0.4 }); windowMats.push(winM);
-    for (let x = x0 + 3; x < x1 - 2; x += 4) g.add(mesh(new T.BoxGeometry(2.4, 1.6, 0.1), winM, x, 2.6, 14.05, false, false));
+    [x0, x1].forEach(x => g.add(mesh(new T.BoxGeometry(0.62, 4.2, 18), facade(18 / 12, 1), x, 2.4, 5)));
     return g;
   }
   world.add(terminalWing(-72, -8)); world.add(terminalWing(8, 72));
@@ -593,10 +674,10 @@ function mount(container, opts) {
   {
     const floorC = new T.Color(0xf1ece3);
     AIRPORT_GATES.forEach(g => { if (g.id === 'D') return; const rug = new T.Mesh(new T.PlaneGeometry(14.5, 10.5), new T.MeshStandardMaterial({ color: floorC.clone().lerp(new T.Color(g.color), 0.2), roughness: 0.95 })); rug.rotation.x = -Math.PI / 2; rug.position.set(g.x, 0.66, 5.4); rug.receiveShadow = true; world.add(rug); });
-    const seatG = new T.BoxGeometry(0.8, 0.9, 0.8), seats = []; 
-    AIRPORT_GATES.forEach(g => { if (g.id === 'D') return; for (let r = 0; r < 2; r++) for (let i = 0; i < 7; i++) seats.push([g.x - 9 + i * 0.95 - 8, -1.7 + r * 1.3]); });
+    const seatG = new T.BoxGeometry(0.17, 0.3, 0.17), seats = []; 
+    AIRPORT_GATES.forEach(g => { if (g.id === 'D') return; for (let r = 0; r < 3; r++) for (let i = 0; i < 14; i++) seats.push([g.x - 9 + i * 0.22 - 8, -2.2 + r * 0.7]); });
     const sm = new T.InstancedMesh(seatG, mat(0x3b4a5e), seats.length); const o = new T.Object3D();
-    seats.forEach(([x, z], i) => { o.position.set(x + 8, 1.1, z); o.updateMatrix(); sm.setMatrixAt(i, o.matrix); }); sm.castShadow = true; world.add(sm);
+    seats.forEach(([x, z], i) => { o.position.set(x + 8, 0.78, z); o.updateMatrix(); sm.setMatrixAt(i, o.matrix); }); sm.castShadow = true; world.add(sm);
     const potG = new T.CylinderGeometry(0.5, 0.4, 0.8, 10), leafG = new T.IcosahedronGeometry(0.9, 0);
     [[-70, 12], [-10, 12], [10, 12], [70, 12], [-70, -2], [70, -2], [-6, -2], [6, -2]].forEach(([x, z]) => { world.add(mesh(potG, mat(0xd8cbb5), x + (x < 0 ? 1.2 : -1.2), 1.0, z)); const l = mesh(leafG, mat(0x6f9a5c, { flatShading: true }), x + (x < 0 ? 1.2 : -1.2), 2.0, z); l.scale.set(1, 1.3, 1); world.add(l); });
   }
@@ -845,8 +926,9 @@ function mount(container, opts) {
   }
 
   /* ---------- trees, windsock, floodlights ---------- */
-  const floodGlows = [], lampMats = [];
-  let sock;
+  const floodGlows = [], lampMats = [], fallbackTrees = [], nightLights = [], obstruction = [];
+  let streetGlow = null, twyGreen = null;
+  let sock, treesIM = null;
   {
     // Mediterranean planting: stone pines, cypresses and olives, smooth organic crowns
     const r = seeded(42), spots = [];
@@ -871,8 +953,46 @@ function mount(container, opts) {
         const k = 0.75 + r() * 0.55; o.position.set(p[0], 0, p[1]); o.scale.set(k, k * (0.9 + r() * 0.25), k); o.rotation.set(0, r() * 6.28, 0); o.updateMatrix();
         trunks.setMatrixAt(i, o.matrix); crowns.setMatrixAt(i, o.matrix); crowns.setColorAt(i, col.setHex(0xffffff).multiplyScalar(0.85 + r() * 0.25));
       });
-      world.add(trunks, crowns);
+      world.add(trunks, crowns); fallbackTrees.push(trunks, crowns);
     });
+    // real Mediterranean trees and shrubs: FlightGear tree photos on crossed quads, sized to real heights
+    {
+      const CELLS = { cypress: [0, 1], holmoak: [2], olive: [3], oak: [4, 5], shrub: [6, 7] };
+      const H = { cypress: [4.2, 6.0], pine: [3.0, 4.2], olive: [1.8, 2.6], holmoak: [3.0, 4.0], oak: [3.2, 4.4], shrub: [0.55, 1.0] };
+      const list = spots.map(p => ({ x: p[0], z: p[1], kind: p[2] === 'pine' ? 'holmoak' : p[2] }));
+      // shrubs along the terminal kerb, the forecourt and the car park edges; hedges along the airside fence
+      for (let x = -70; x <= 70; x += 2.2) if (Math.abs(x) > 9) list.push({ x: x + r() * 0.8, z: 16.4 + r() * 0.6, kind: 'shrub' });
+      for (let x = -200; x <= 200; x += 3.5) list.push({ x: x + r(), z: 29.3 + r() * 0.5, kind: r() < 0.85 ? 'shrub' : 'olive' });
+      [[-94, 54], [94, 54]].forEach(([cx, cz]) => { for (let x = cx - 36; x <= cx + 36; x += 4) { list.push({ x, z: cz - 12, kind: 'shrub' }); list.push({ x, z: cz + 12, kind: r() < 0.3 ? 'olive' : 'shrub' }); } });
+      for (let i = 0; i < 160; i++) { const x = -260 + r() * 520, z = 60 + r() * 120; list.push({ x, z, kind: ['olive', 'olive', 'holmoak', 'cypress', 'shrub'][Math.floor(r() * 5)] }); }
+      for (let i = 0; i < 70; i++) { const x = -210 + r() * 60, z = -10 + r() * 80; list.push({ x, z, kind: r() < 0.6 ? 'olive' : 'shrub' }); }
+      const quad = new T.PlaneGeometry(1, 1).translate(0, 0.5, 0), q2 = quad.clone().rotateY(Math.PI / 2);
+      const cross = new T.BufferGeometry();
+      ['position', 'uv'].forEach(k => cross.setAttribute(k, new T.Float32BufferAttribute([...quad.attributes[k].array, ...q2.attributes[k].array], k === 'uv' ? 2 : 3)));
+      cross.setIndex([...quad.index.array, ...Array.from(q2.index.array, v => v + 4)]);
+      cross.setAttribute('normal', new T.Float32BufferAttribute(new Array(8).fill(0).flatMap(() => [0, 1, 0]), 3));
+      const n = list.length, cell = new Float32Array(n);
+      const patch = sh => {
+        sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute float aCell;')
+          .replace('#include <uv_vertex>', '#include <uv_vertex>\n#ifdef USE_MAP\nvMapUv.x = (vMapUv.x + aCell) / 8.0;\n#endif');
+      };
+      const tm = new T.MeshStandardMaterial({ alphaTest: 0.45, side: T.DoubleSide, roughness: 0.95, color: 0xffffff });
+      tm.onBeforeCompile = patch;
+      const dm = new T.MeshDepthMaterial({ depthPacking: T.RGBADepthPacking, alphaTest: 0.45, side: T.DoubleSide }); dm.onBeforeCompile = patch;
+      const im = new T.InstancedMesh(cross, tm, n); im.customDepthMaterial = dm; im.castShadow = true; im.receiveShadow = false; im.visible = false;
+      const o = new T.Object3D(), col = new T.Color();
+      list.forEach((t, i) => {
+        const [h0, h1] = H[t.kind]; const h = h0 + r() * (h1 - h0); const opts2 = CELLS[t.kind]; cell[i] = opts2[Math.floor(r() * opts2.length)];
+        const w = h * (t.kind === 'cypress' ? 0.42 : t.kind === 'shrub' ? 1.1 : 0.85);
+        o.position.set(t.x, 0, t.z); o.rotation.set(0, r() * Math.PI, 0); o.scale.set(w, h, w); o.updateMatrix(); im.setMatrixAt(i, o.matrix);
+        const lift = t.kind === 'shrub' ? 1.35 : 1; im.setColorAt(i, col.setRGB((0.92 + r() * 0.16) * lift, (0.9 + r() * 0.16) * lift, (0.82 + r() * 0.12) * lift));
+      });
+      cross.setAttribute('aCell', new T.InstancedBufferAttribute(cell, 1));
+      world.add(im); treesIM = im;
+      photo('trees.webp', t => { t.wrapS = T.ClampToEdgeWrapping; }).then(t => {
+        if (!alive.on) return; tm.map = t; dm.map = t; tm.needsUpdate = dm.needsUpdate = true; im.visible = true; fallbackTrees.forEach(f => f.visible = false);
+      }).catch(() => {});
+    }
     const ws = new T.Group(); ws.position.set(-60, 0, RWY_Z + 14);
     ws.add(cyl(0.12, 0.12, 6, P.steel, 0, 3, 0, 6));
     sock = mesh(new T.ConeGeometry(0.6, 3, 10, 1, true), mat(0xff9f0a, { side: T.DoubleSide }), 1.5, 5.8, 0); sock.rotation.z = Math.PI / 2;
@@ -886,6 +1006,34 @@ function mount(container, opts) {
     });
     lightPool(70, 14, 0xffc977, -40, -6); lightPool(70, 14, 0xffc977, 40, -6);
     lightPool(120, 12, 0xffd9a0, 0, 22.5); lightPool(40, 30, 0xffd9a0, HANGAR.x, -32);
+    // real light sources on the apron masts (desktop): sodium-warm spots that light aircraft and tarmac
+    if (!isPhone) [-86, -40, 40, 86].forEach(x => {
+      const sp = new T.SpotLight(0xffd6a0, 0, 95, 0.95, 0.65, 1.1); sp.position.set(x, 16, -11.5); sp.target.position.set(x * 0.92, 0, -30);
+      world.add(sp, sp.target); nightLights.push([sp, 60]);
+    });
+    // landside street lamps every 14 m along the road, with pools and glows
+    {
+      const xs = []; for (let x = -196; x <= 196; x += 14) xs.push(x);
+      const pole = new T.InstancedMesh(new T.CylinderGeometry(0.035, 0.05, 3.2, 6).translate(0, 1.6, 0), mat(0x5c6168, { metalness: 0.6, roughness: 0.4 }), xs.length);
+      const arm = new T.InstancedMesh(new T.BoxGeometry(0.6, 0.05, 0.08).translate(0.25, 3.18, 0), mat(0x5c6168, { metalness: 0.6, roughness: 0.4 }), xs.length);
+      const o = new T.Object3D(); xs.forEach((x, i) => { o.position.set(x, 0, 29.6); o.rotation.y = Math.PI / 2; o.updateMatrix(); pole.setMatrixAt(i, o.matrix); arm.setMatrixAt(i, o.matrix); });
+      world.add(pole, arm);
+      const gp = new Float32Array(xs.length * 3); xs.forEach((x, i) => gp.set([x, 3.15, 29.85], i * 3));
+      const gg = new T.BufferGeometry(); gg.setAttribute('position', new T.BufferAttribute(gp, 3));
+      streetGlow = new T.Points(gg, new T.PointsMaterial({ map: GLOW, color: 0xffcf8a, size: 2.6, transparent: true, opacity: 0, depthWrite: false, blending: T.AdditiveBlending })); world.add(streetGlow);
+      xs.forEach(x => lightPool(9, 9, 0xffc98a, x, 31));
+    }
+    // red obstruction lights on everything tall
+    [[0, 44.2, 6], [HANGAR.x - 18, 13.3, HANGAR.z - 15], [HANGAR.x + 18, 13.3, HANGAR.z - 15], [-86, 16.8, -11], [-40, 16.8, -11], [40, 16.8, -11], [86, 16.8, -11]].forEach(([x, y, z], i) => {
+      const g = glow(0xff2a1a, 1.6, 0); g.position.set(x, y, z); world.add(g); obstruction.push({ g, ph: i * 0.37 });
+    });
+    // green taxiway centreline lights
+    {
+      const pts = []; for (let x = -126; x <= 112; x += 4) pts.push(x, 0.2, TWY_Z);
+      for (let z = TWY_Z - 3; z > RWY_Z + 6; z -= 3) { pts.push(-122, 0.2, z); pts.push(96, 0.2, z); }
+      const g = new T.BufferGeometry(); g.setAttribute('position', new T.Float32BufferAttribute(pts, 3));
+      twyGreen = new T.Points(g, new T.PointsMaterial({ map: GLOW, color: 0x37ff7a, size: 1.6, transparent: true, opacity: 0, depthWrite: false, blending: T.AdditiveBlending })); world.add(twyGreen);
+    }
   }
 
   /* ================================================== PEOPLE */
@@ -904,7 +1052,7 @@ function mount(container, opts) {
       else { x.fillRect(34, 32, 22, 22); x.fillRect(56, 37, 8, 10); }
       bubbleTex[kind] = new T.CanvasTexture(c);
     }
-    const s = new T.Sprite(new T.SpriteMaterial({ map: bubbleTex[kind], transparent: true, depthWrite: false })); s.scale.set(1.3, 1.3, 1); return s;
+    const s = new T.Sprite(new T.SpriteMaterial({ map: bubbleTex[kind], transparent: true, depthWrite: false })); s.scale.set(3.4, 3.4, 1); return s;
   }
   function makePerson(agent, gate, idx) {
     const g = new T.Group();
@@ -918,7 +1066,7 @@ function mount(container, opts) {
     const legL = new T.Group(), legR = new T.Group(); legL.position.set(-0.22, 0.75, 0); legR.position.set(0.22, 0.75, 0);
     const pants = mat(0x3a4250); legL.add(mesh(limbG, pants, 0, -0.38, 0)); legR.add(mesh(limbG, pants, 0, -0.38, 0)); g.add(legL, legR);
     const cup = mesh(new T.CylinderGeometry(0.12, 0.1, 0.25, 8), mat(0xffffff), 0, -0.85, 0.15); cup.visible = false; armR.add(cup);
-    g.scale.setScalar(0.52);
+    g.scale.setScalar(0.72 * KD);
     const bub = { work: bubble('work'), brain: bubble('brain'), coffee: bubble('coffee') };
     Object.values(bub).forEach(b => { b.position.set(0, 3.6, 0); b.visible = false; g.add(b); });
     return { agent, gate, g, armL, armR, legL, legR, head, cup, bub, phase: idx * 1.37, mode: 'desk', path: null, s: 0, wait: 0 };
@@ -929,19 +1077,22 @@ function mount(container, opts) {
     if (gate.id === 'S') { const col = i % 3, row = Math.floor(i / 3); return { x: 105.5 + col * 5, z: -104 - row * 4.4, y: QUAY.top + 0.06 }; }
     const col = i % 3, row = Math.floor(i / 3); return { x: gate.x - 6 + (col - 1) * 4.4 + 6, z: 1.6 + row * 4.4, y: 0.62 };
   }
+  const KD = 0.36, deskGlows = [];
   function addPerson(a) {
     const gate = teamOf(a.team);
     deskSlots[gate.id] = deskSlots[gate.id] || 0;
     const i = deskSlots[gate.id]++;
     const s = seatFor(gate, i);
-    const deskZ = s.z - 1.0;
-    world.add(mesh(deskG, mat(0xd8cbb5), s.x, s.y + 0.83, deskZ));
-    [[-1, -0.5], [1, -0.5], [-1, 0.5], [1, 0.5]].forEach(([dx, dz]) => world.add(box(0.1, 0.8, 0.1, P.steel, s.x + dx, s.y + 0.4, deskZ + dz * 0.9)));
+    // furniture in a group scaled to real size (KD), the person matches it
+    const fg = new T.Group(); fg.position.set(s.x, s.y, s.z); fg.scale.setScalar(KD); world.add(fg);
+    fg.add(mesh(deskG, mat(0xd8cbb5), 0, 0.83, -1.0));
+    [[-1, -0.5], [1, -0.5], [-1, 0.5], [1, 0.5]].forEach(([dx, dz]) => fg.add(box(0.1, 0.8, 0.1, P.steel, dx, 0.4, -1.0 + dz * 0.9)));
     const monM = new T.MeshStandardMaterial({ color: 0x1d2530, emissive: 0x64d2ff, emissiveIntensity: 0, roughness: 0.5 });
-    world.add(mesh(monG, monM, s.x, s.y + 1.38, deskZ - 0.35));
-    world.add(mesh(chairG, mat(0x3a4250), s.x, s.y + 0.38, s.z + 0.1));
+    fg.add(mesh(monG, monM, 0, 1.38, -1.35));
+    fg.add(mesh(chairG, mat(0x3a4250), 0, 0.38, 0.1));
+    const lampGl = glow(0xffd9a0, 2.2, 0); lampGl.position.set(0.7, 1.5, -1.1); fg.add(lampGl); deskGlows.push(lampGl);
     const p = makePerson(a, gate, people.length);
-    p.home = V(s.x, s.y + 0.18, s.z + 0.2); p.face = Math.PI; p.mon = monM;
+    p.home = V(s.x, s.y + 0.18 * KD, s.z + 0.2 * KD); p.face = Math.PI; p.mon = monM;
     p.g.position.copy(p.home); p.g.rotation.y = p.face;
     world.add(p.g); pickable(p.g, { kind: 'agent', id: a.id });
     people.push(p); a._p = p;
@@ -954,7 +1105,7 @@ function mount(container, opts) {
     if (j && j.justStarted) startSweep();
   }
   const coffee = [V(-40, 0.8, 11), V(40, 0.8, 11), V(HANGAR.x + 12, 0.6, HANGAR.z + 10), V(118, 0.84, -103)];
-  coffee.forEach(c => { world.add(box(2.4, 1.6, 1, 0x6b4f3a, c.x, c.y + 0.6, c.z + 1.4)); world.add(box(0.8, 0.5, 0.6, 0x2b2b2b, c.x - 0.5, c.y + 1.65, c.z + 1.4)); });
+  coffee.forEach(c => { world.add(box(0.9, 0.6, 0.4, 0x6b4f3a, c.x, c.y + 0.1, c.z + 1.0)); world.add(box(0.3, 0.2, 0.25, 0x2b2b2b, c.x - 0.2, c.y + 0.5, c.z + 1.0)); });
   function walkPath(from, to, viaCenter) {
     const pts = [[from.x, from.z]];
     if (viaCenter) { pts.push([from.x, 9.5]); pts.push([TOWER.x + (from.x < 0 ? -7.5 : 7.5), 9.5]); }
@@ -986,7 +1137,7 @@ function mount(container, opts) {
         const amp = reduced ? 0 : 0.12;
         rx(p.armL, -1.1 + Math.sin(t * 14) * amp); rx(p.armR, -1.1 + Math.sin(t * 14 + 1.7) * amp);
         p.head.rotation.x = 0.15 + Math.sin(t * 0.9) * 0.05 * (reduced ? 0 : 1); p.cup.visible = false;
-        p.bub.work.visible = CAM.dist < 120; p.bub.work.position.y = 3.6 + Math.sin(t * 2) * 0.1;
+        p.bub.work.visible = CAM.dist < 70; p.bub.work.position.y = 3.6 + Math.sin(t * 2) * 0.1;
         if (!reduced && Math.random() < dt * 0.006) sendWalk(p, 'brain');
       } else if (st === 'resting') {
         const sip = reduced ? 0.5 : (Math.sin(t * 0.8) + 1) / 2;
@@ -996,7 +1147,7 @@ function mount(container, opts) {
       p.mon.emissiveIntensity = st === 'working' ? 1.0 : st === 'resting' ? 0.15 : 0;
     } else if (p.mode === 'walking' || p.mode === 'return') {
       p.g.visible = true;
-      p.s += 3.4 * dt; const u = clamp(p.s / p.path._len, 0, 1);
+      p.s += 1.3 * dt; const u = clamp(p.s / p.path._len, 0, 1);
       p.g.position.copy(p.path.getPointAt(u)); const tan = p.path.getTangentAt(Math.min(u, 0.999));
       p.g.rotation.y = Math.atan2(tan.x, tan.z);
       const sw = Math.sin(t * 9) * 0.6; rx(p.legL, sw); rx(p.legR, -sw); rx(p.armL, -sw * 0.7); rx(p.armR, sw * 0.7); p.cup.visible = false;
@@ -1478,7 +1629,7 @@ function mount(container, opts) {
   const QUAY = { x0: 38, x1: 124, z0: COAST_Z - 0, z1: -119, top: 0.6 };
   const SHIP_POS = { x: 72, z: -121.9 };
   const PORT = { x0: 102, x1: 120, z0: -101.5, z1: -115 };
-  let seaMat, foam, shipObj = null, lighthouseBeam, water = null;
+  let seaMat, foam, shipObj = null, lighthouseBeam, water = null; const yachts = [];
   const seaGlows = [];
   {
     // sea normal map: tiling sine ripples turned into normals
@@ -1508,6 +1659,7 @@ function mount(container, opts) {
     surface(TEX.concrete, QUAY.x1 - QUAY.x0, QUAY.z0 - QUAY.z1 + 4, (QUAY.x0 + QUAY.x1) / 2, QUAY.top + 0.01, (QUAY.z0 + QUAY.z1) / 2 + 2, 30, 30, 0, false);
     world.add(flat(QUAY.x1 - QUAY.x0, 0.35, 0xf2c14e, (QUAY.x0 + QUAY.x1) / 2, QUAY.top + 0.06, QUAY.z1 + 1.2));
     for (let xx = QUAY.x0 + 3; xx < QUAY.x1; xx += 6) { world.add(cyl(0.28, 0.34, 0.6, 0x3a3f46, xx, QUAY.top + 0.3, QUAY.z1 + 0.6, 10)); world.add(box(1.6, 1.4, 0.5, 0x2d2f33, xx + 3, QUAY.top - 0.9, QUAY.z1 - 0.2)); }
+    if (!isPhone) [70, 104].forEach(xx => { const sp = new T.SpotLight(0xffd6a0, 0, 60, 0.9, 0.7, 1.1); sp.position.set(xx, QUAY.top + 9, QUAY.z1 + 2.2); sp.target.position.set(xx, 0, QUAY.z1 + 8); world.add(sp, sp.target); nightLights.push([sp, 40]); });
     [46, 96, 122].forEach(xx => { world.add(cyl(0.18, 0.24, 9, P.steel, xx, QUAY.top + 4.5, QUAY.z1 + 2.2, 8)); const gl = glow(0xffe6b0, 5, 0); gl.position.set(xx, QUAY.top + 9, QUAY.z1 + 2.2); world.add(gl); floodGlows.push(gl); lightPool(22, 18, 0xffd9a0, xx, QUAY.z1 + 5, QUAY.top + 0.08); });
     // port crane over the ship
     const cr = new T.Group(); cr.position.set(90, QUAY.top, -108);
@@ -1540,7 +1692,7 @@ function mount(container, opts) {
     const ft = TEX.floor.clone(); ft.needsUpdate = true; ft.repeat.set(w / 12, d / 12);
     const fl = new T.Mesh(new T.PlaneGeometry(w, d), new T.MeshStandardMaterial({ map: ft, roughness: 0.5 })); fl.rotation.x = -Math.PI / 2; fl.position.set(cx, QUAY.top + 0.05, cz); fl.receiveShadow = true; g.add(fl);
     const rug = new T.Mesh(new T.PlaneGeometry(w - 3, d - 4), new T.MeshStandardMaterial({ color: new T.Color(0xf1ece3).lerp(new T.Color(0x2f6e8e), 0.18), roughness: 0.95 })); rug.rotation.x = -Math.PI / 2; rug.position.set(cx, QUAY.top + 0.07, cz + 0.5); g.add(rug);
-    g.add(box(w, 3.8, 0.5, P.terminal, cx, QUAY.top + 1.9, PORT.z0));
+    g.add(mesh(new T.BoxGeometry(w, 3.8, 0.5), facade(w / 12, 1), cx, QUAY.top + 1.9, PORT.z0));
     [PORT.x0, PORT.x1].forEach(xx => g.add(box(0.5, 3.8, d, P.terminal, xx, QUAY.top + 1.9, cz)));
     g.add(mesh(new T.BoxGeometry(w, 3.2, 0.2), new T.MeshStandardMaterial({ color: P.glass, transparent: true, opacity: 0.28, roughness: 0.1 }), cx, QUAY.top + 1.9, PORT.z1, false, false));
     for (let xx = PORT.x0; xx <= PORT.x1 + 0.01; xx += 4.5) g.add(box(0.3, 3.8, 0.3, P.steel, xx, QUAY.top + 1.9, PORT.z1));
@@ -1610,9 +1762,27 @@ function mount(container, opts) {
     const sh = makeRescueShip();
     shipObj = new T.Group(); shipObj.add(sh); shipObj.position.set(SHIP_POS.x, SEA_Y, SHIP_POS.z); world.add(shipObj);
     pickable(shipObj, { kind: 'vessel', id: 'vessel' });
+    // yachts in the bay: two at anchor, one sailing a slow loop
+    [[-60, -150, 'yacht', 0.4, false], [-30, -175, 'yacht2', 2.2, false], [10, -210, 'yacht', 1.2, true], [-110, -200, 'yacht2', 3.4, false]].forEach(([x, z, m, h, sails], i) => {
+      const g = new T.Group(); g.position.set(x, SEA_Y, z); g.rotation.y = h; world.add(g);
+      model(m).then(mm => { if (!alive.on) return; const c = mm.clone(true); g.add(c); }).catch(() => {});
+      yachts.push({ g, sails, a: i * 1.3, cx: x, cz: z });
+    });
+    seaGlows.forEach(o => { if (o.buoy) { const b = o.buoy; model(b.userData.bob % 2 ? 'buoyR' : 'buoyG').then(mm => { if (!alive.on) return; const c = mm.clone(true); c.scale.setScalar(1.6); c.position.y = -0.2; [...b.children].forEach(ch => { if (!ch.isSprite) b.remove(ch); }); b.add(c); }).catch(() => {}); } });
     const tg = signSprite('⚓', SHIP.name, '#2F6E8E', 4.6); tg.position.set(SHIP_POS.x, 13, SHIP_POS.z); world.add(tg);
   }
   /* ---------- ground vehicles ---------- */
+  // shared car geometry: an extruded side profile with a glasshouse, rounded by bevels
+  const CARGEO = (() => {
+    const prof = (pts) => { const sh = new T.Shape(); pts.forEach(([z, y], i) => i ? sh.lineTo(z, y) : sh.moveTo(z, y)); sh.closePath(); return sh; };
+    const ext = (sh, w, bev) => { const g = new T.ExtrudeGeometry(sh, { depth: w - bev * 2, bevelEnabled: true, bevelThickness: bev, bevelSize: bev, bevelSegments: 3, curveSegments: 6 }); g.translate(0, 0, -(w - bev * 2) / 2); g.rotateY(Math.PI / 2); return g; };
+    const body = ext(prof([[-0.77, 0.06], [0.74, 0.06], [0.77, 0.16], [0.75, 0.23], [0.4, 0.27], [-0.62, 0.29], [-0.77, 0.24]]), 0.6, 0.04);
+    const cabin = ext(prof([[0.36, 0.27], [0.12, 0.45], [-0.36, 0.46], [-0.6, 0.3]]), 0.54, 0.03);
+    const busBody = ext(prof([[-2.0, 0.08], [2.0, 0.08], [2.02, 0.95], [1.9, 1.02], [-2.0, 1.02]]), 0.85, 0.04);
+    const busGlass = ext(prof([[-1.85, 0.55], [1.98, 0.55], [1.99, 0.93], [-1.85, 0.93]]), 0.87, 0.01);
+    return { body, cabin, busBody, busGlass, wheel: new T.CylinderGeometry(0.105, 0.105, 0.07, 14), busWheel: new T.CylinderGeometry(0.17, 0.17, 0.1, 14),
+      glass: new T.MeshPhysicalMaterial({ color: 0x141a22, roughness: 0.05, metalness: 0.2, clearcoat: 1 }), tyre: new T.MeshStandardMaterial({ color: 0x18191b, roughness: 0.85 }) };
+  })();
   function makeVehicle(kind) {
     const g = new T.Group(); const dark = mat(0x2a2f36); const parts = {};
     if (kind === 'tug') { g.add(box(1.8, 0.8, 3.0, P.tug, 0, 0.7, 0)); g.add(box(1.3, 0.8, 1.0, dark, 0, 1.4, -0.7)); }
@@ -1626,17 +1796,30 @@ function mount(container, opts) {
       g.add(box(2.0, 1.8, 4.2, 0xffffff, 0, 1.2, 0)); g.add(box(2.02, 0.35, 4.22, 0x0a84ff, 0, 1.0, 0)); g.add(box(1.9, 0.7, 0.1, dark, 0, 1.6, 2.1));
       parts.beacon = glow(0x64d2ff, 1.8); parts.beacon.position.set(0, 2.4, 0); g.add(parts.beacon);
     } else {
+      // real-size road vehicles (0.335 units per metre): 4.6 m saloon, 12 m bus
       const r = Math.random();
-      const col = kind === 'taxi' ? 0xf2c14e : kind === 'bus' ? 0xffffff : [0x5b8def, 0xd9534f, 0x9aa3ad, 0x2b2f36, 0xf4f1ec, 0x6aa36b][Math.floor(r * 6)];
-      const Ln = kind === 'bus' ? 8 : 3.4;
-      g.add(box(1.7, 0.7, Ln, col, 0, 0.6, 0));
-      if (kind === 'bus') { g.add(box(1.5, 1.3, Ln - 0.4, col, 0, 1.5, 0)); g.add(box(1.52, 0.5, Ln - 0.6, dark, 0, 1.7, 0)); g.add(box(1.72, 0.2, Ln, 0x0a84ff, 0, 0.9, 0)); }
-      else g.add(box(1.5, 0.6, 1.8, dark, 0, 1.2, -0.2));
-      parts.hl = glow(0xfff3cf, 2.2, 0); parts.hl.position.set(0, 0.7, Ln / 2 + 0.3); g.add(parts.hl);
+      const col = kind === 'taxi' ? 0xf4f4f2 : kind === 'bus' ? 0xf4f4f2 : [0x1f2a38, 0x8a8f96, 0xd8d9db, 0x101214, 0x6b1d1d, 0x2f4a6b, 0xbfc3c8, 0x3b3f44][Math.floor(r * 8)];
+      const paint = new T.MeshPhysicalMaterial({ color: col, roughness: 0.32, metalness: 0.55, clearcoat: 1, clearcoatRoughness: 0.08 });
+      if (kind === 'bus') {
+        const L = 4.0, W = 0.85, H = 1.05;
+        g.add(mesh(CARGEO.busBody, paint, 0, 0.12, 0));
+        g.add(mesh(CARGEO.busGlass, CARGEO.glass, 0, 0.12, 0));
+        [[-1, 1.3], [1, 1.3], [-1, -1.3], [1, -1.3]].forEach(([sx, z]) => { const w = mesh(CARGEO.busWheel, CARGEO.tyre, sx * W * 0.47, 0.17, z); w.rotation.z = Math.PI / 2; g.add(w); });
+        g.add(box(W * 1.01, 0.06, L * 0.96, 0xd9782d, 0, 0.4, 0));
+        parts.hl = glow(0xfff3cf, 1.4, 0); parts.hl.position.set(0, 0.4, L / 2 + 0.15); g.add(parts.hl);
+        parts.tl = glow(0xff2a1a, 0.7, 0); parts.tl.position.set(0, 0.45, -L / 2 - 0.05); g.add(parts.tl);
+      } else {
+        g.add(mesh(CARGEO.body, paint, 0, 0.11, 0));
+        g.add(mesh(CARGEO.cabin, CARGEO.glass, 0, 0.11, 0));
+        if (kind === 'taxi') g.add(box(0.2, 0.06, 0.12, 0x2b9a4a, 0, 0.6, 0.02));
+        [[-1, 0.47], [1, 0.47], [-1, -0.47], [1, -0.47]].forEach(([sx, z]) => { const w = mesh(CARGEO.wheel, CARGEO.tyre, sx * 0.27, 0.11, z); w.rotation.z = Math.PI / 2; g.add(w); });
+        parts.hl = glow(0xfff3cf, 1.1, 0); parts.hl.position.set(0, 0.25, 0.8); g.add(parts.hl);
+        parts.tl = glow(0xff2a1a, 0.55, 0); parts.tl.position.set(0, 0.28, -0.78); g.add(parts.tl);
+      }
     }
     g.traverse(c => { if (c.isMesh) c.castShadow = true; });
     world.add(g);
-    return { kind, g, parts, path: null, s: 0, speed: 0, max: kind === 'bus' ? 7 : kind === 'van' ? 9 : 6, state: 'idle' };
+    return { kind, g, parts, path: null, s: 0, speed: 0, max: kind === 'bus' ? 3.4 : kind === 'van' ? 4 : ['car', 'taxi'].includes(kind) ? 4.2 : 3, state: 'idle' };
   }
 
   /* ================================================== SIMULATION */
@@ -1666,8 +1849,9 @@ function mount(container, opts) {
   const roadMain = roundedPath([[230, 31.6], [-230, 31.6]], 4, 0);
   const cars = [];
   const nCars = isPhone ? 6 : 10;
-  for (let i = 0; i < nCars; i++) { const kind = i === 0 ? 'bus' : i % 3 === 0 ? 'taxi' : 'car'; const v = makeVehicle(kind); v.path = roadLoop; v.s = i * roadLoop._len / nCars; v.speed = v.max; v.loop = true; cars.push(v); }
-  for (let i = 0; i < 4; i++) { const v = makeVehicle('car'); v.path = roadMain; v.s = i * roadMain._len / 4; v.speed = v.max; v.loop = true; v.through = true; cars.push(v); }
+  for (let i = 0; i < nCars * 2; i++) { const kind = i === 0 || i === 9 ? 'bus' : i % 4 === 0 ? 'taxi' : 'car'; const v = makeVehicle(kind); v.path = roadLoop; v.s = i * roadLoop._len / (nCars * 2); v.speed = v.max; v.loop = true; cars.push(v); }
+  cars.forEach(v => { if (v.kind === 'bus') swapIn(v.g, 'bus', [v.parts.hl, v.parts.tl]); });
+  for (let i = 0; i < 10; i++) { const v = makeVehicle(i === 5 ? 'bus' : 'car'); v.path = roadMain; v.s = i * roadMain._len / 10; v.speed = v.max; v.loop = true; v.through = true; cars.push(v); }
 
   // Jarvis's van
   // real ground equipment replaces the drawn trucks once loaded
@@ -1835,11 +2019,12 @@ function mount(container, opts) {
   function updateVehicle(v, dt) {
     if (v.parts.box) { v.liftY = lerp(v.liftY || 0, v.lift ? 2.6 : 0, 1 - Math.exp(-dt * 1.5)); v.parts.box.position.y = 1.6 + v.liftY; v.parts.stripe.position.y = 1.6 + v.liftY; }
     if (v.parts.hl) v.parts.hl.material.opacity = ENV.night * 0.9;
+    if (v.parts.tl) v.parts.tl.material.opacity = 0.15 + ENV.night * 0.75;
     if (!v.loop && v.state !== 'driving') return;
     const path = v.path; if (!path) return;
     const fwd = V(Math.sin(v.g.rotation.y), 0, Math.cos(v.g.rotation.y));
     let blocker = blockedAhead(v, SIM.aircraft, 13, 0.55, fwd);
-    if (!blocker) blocker = blockedAhead(v, v.loop && v !== van ? cars : SIM.vehicles.filter(o => o.state === 'driving' || o.state === 'working' || o === van), v.kind === 'bus' ? 9 : 5.5, 0.8, fwd);
+    if (!blocker) blocker = blockedAhead(v, v.loop && v !== van ? cars : SIM.vehicles.filter(o => o.state === 'driving' || o.state === 'working' || o === van), v.kind === 'bus' ? 6 : 3, 0.8, fwd);
     if (v.loop && !v.through && v !== van) {
       const p = v.g.position;
       if (v.kerbX === undefined) v.kerbX = (Math.random() - 0.5) * 80;
@@ -1959,14 +2144,19 @@ function mount(container, opts) {
     sun.position.set(Math.cos(ang) * 260 + 30, 160 + Math.sin(ang) * 140, 150); sun.target.position.set(0, 0, -15);
     flash.intensity = ENV.lightning * 3 * LS;
     renderer.toneMappingExposure = lerp(1.12, 0.9, k);
-    windowMats.forEach(m => m.emissiveIntensity = k * 1.1);
+    windowMats.forEach(m => m.emissiveIntensity = k * 0.95);
+    deskGlows.forEach(g => g.material.opacity = k * 0.8);
     edgeMats.forEach(e => { e.m.color.setHex(e.c).multiplyScalar(0.35 + k * 0.9); });
     approachGlows.forEach((s, i) => s.material.opacity = k * (((SIM.t * 2 - i * 0.12) % 1) < 0.15 ? 1 : 0.3));
     lampMats.forEach(m => m.color.setHex(k > 0.45 ? 0xfff2c8 : 0x8a8a8a));
     beaconM.color.setHex(k > 0.45 ? ((SIM.t % 1.4) < 0.7 ? 0xff453a : 0x5a1a14) : 0xb23a2a);
     floodGlows.forEach(g => g.material.opacity = k * 0.8);
     beam.material.opacity = 0.04 + k * 0.07;
-    pools.forEach(m => m.material.opacity = k * 0.32);
+    pools.forEach(m => m.material.opacity = k * 0.26);
+    nightLights.forEach(([l, i]) => { l.intensity = k * i * (LS > 1 ? 1 : 0.3); l.visible = k > 0.05; });
+    if (streetGlow) streetGlow.material.opacity = clamp(k * 1.3 - 0.15, 0, 1);
+    if (twyGreen) twyGreen.material.opacity = clamp(k * 1.3 - 0.15, 0, 1) * 0.85;
+    obstruction.forEach(o => o.g.material.opacity = (0.25 + k * 0.75) * (((SIM.t * 0.9 + o.ph) % 1.6) < 0.8 ? 1 : 0.15));
     if (edgeGlow) edgeGlow.material.opacity = clamp(k * 1.3 - 0.15, 0, 1);
     stars.material.opacity = clamp(k * 1.2 - 0.2, 0, 1) * (ENV.weather === 'clear' ? 1 : 0.1);
     rain.visible = ENV.weather === 'rain' || ENV.weather === 'storm'; dust.visible = ENV.weather === 'calima';
@@ -1975,8 +2165,11 @@ function mount(container, opts) {
     c1.setHex(0x3b7fd0).lerp(c2.setHex(0x040812), k); c1.lerp(c3.setHex(0x5a6ea8), dusk * 0.5);
     if (wx.tint) c1.lerp(c2.setHex(wx.tint).multiplyScalar(1 - k * 0.8), 0.7);
     skyU.top.value.copy(c1); skyU.mid.value.copy(bg); skyU.sunDir.value.copy(sun.position).normalize();
-    skyU.sunCol.value.copy(sun.color); updateEnvMap(k, ENV.weather, c1, bg); skyU.glowK.value = (1 - k * 0.85) * (ENV.weather === 'clear' ? 1 : 0.3);
-    clouds.mat.color.setHex(0xffffff).lerp(c2.setHex(0x161c2c), k * 0.95); if (wx.tint) clouds.mat.color.lerp(c2.setHex(wx.tint), 0.5);
+    skyU.sunCol.value.copy(sun.color); updateEnvMap(k, ENV.weather, c1, bg);
+    skyU.sunPosition.value.copy(sun.position).normalize().multiplyScalar(450000); skyU.dayK.value = clamp(1 - k * 1.25, 0, 1) * (1 - dusk * 0.25);
+    skyU.overcast.value = ENV.weather === 'clear' ? 0 : ENV.weather === 'calima' ? 0.55 : 0.85; skyU.overcastCol.value.copy(bg); skyU.glowK.value = (1 - k * 0.85) * (ENV.weather === 'clear' ? 1 : 0.3);
+    clouds.mat.color.copy(sun.color).lerp(c2.setHex(0xffffff), 0.55).lerp(c3.setHex(0x1a2234), k * 0.92); if (wx.tint) clouds.mat.color.lerp(c2.setHex(wx.tint), 0.5);
+    clouds.mat.opacity = ENV.weather === 'clear' ? 0.9 : 1;
     hillMat.color.setHex(0x9db08f).lerp(c2.setHex(0x1c2433), k * 0.6);
     seaMat.color.setHex(0x2a5f7a).lerp(c2.setHex(0x0a1626), k * 0.92); if (wx.tint) seaMat.color.lerp(c2.setHex(wx.tint).multiplyScalar(0.55), 0.35);
     seaMat.normalScale.setScalar(ENV.weather === 'storm' ? 0.9 : ENV.weather === 'rain' ? 0.55 : 0.35);
@@ -2183,9 +2376,9 @@ function mount(container, opts) {
     } else {
       const o = objFor(info);
       if (o) {
-        const d = (info.kind === 'flight' ? (SIM.boats.some(b => b.g === o) ? 34 : 62) : info.kind === 'fleet' ? 52 : info.kind === 'agent' ? 30 : 30) * (isPhone ? 1.5 : 1);
+        const d = (info.kind === 'flight' ? (SIM.boats.some(b => b.g === o) ? 34 : 62) : info.kind === 'fleet' ? 52 : info.kind === 'agent' ? 13 : 30) * (isPhone ? 1.5 : 1);
         flyTo(followPoint(o), d, CAM.az, info.kind === 'agent' ? 0.62 : 0.9, 900, info.kind === 'fleet' ? null : o);
-        selRing.visible = true; selRing.scale.setScalar(info.kind === 'flight' ? 9 : info.kind === 'fleet' ? 13 : info.kind === 'agent' ? 1.6 : 3);
+        selRing.visible = true; selRing.scale.setScalar(info.kind === 'flight' ? 9 : info.kind === 'fleet' ? 13 : info.kind === 'agent' ? 0.75 : 3);
       }
     }
     UI && UI.select(info);
@@ -2267,6 +2460,7 @@ function mount(container, opts) {
     foam.material.opacity = water ? 0 : 0.3 + 0.25 * Math.sin(SIM.t * 0.8);
     seaGlows.forEach(o => { if (o.gl) o.gl.material.opacity = ENV.night * (((SIM.t * 0.5 + o.ph) % 2) < 0.35 ? 1 : 0.12); if (o.buoy) { o.buoy.position.y = SEA_Y + Math.sin(SIM.t * 1.3 + o.buoy.userData.bob) * 0.14; o.buoy.rotation.z = Math.sin(SIM.t + o.buoy.userData.bob) * 0.08; } });
     { const sh = shipObj.children[0]; sh.position.y = Math.sin(SIM.t * 0.6) * 0.07; sh.rotation.x = Math.sin(SIM.t * 0.45) * 0.01; sh.rotation.z = Math.sin(SIM.t * 0.33) * 0.004; sh.userData.lights.forEach(l => l.material.opacity = ENV.night * 0.9); }
+    yachts.forEach(y => { if (y.sails) { y.a += dt * 0.012; y.g.position.x = y.cx + Math.cos(y.a) * 60; y.g.position.z = y.cz + Math.sin(y.a) * 28; y.g.rotation.y = -y.a + Math.PI; } y.g.position.y = SEA_Y + Math.sin(SIM.t * 1.1 + y.cx) * 0.06; y.g.rotation.z = Math.sin(SIM.t * 0.7 + y.cz) * 0.04 + (y.sails ? 0.08 : 0); });
     lighthouseBeam.rotation.y = SIM.t * 0.6; lighthouseBeam.material.opacity = ENV.night * 0.35;
     SIM.aircraft = SIM.aircraft.filter(a => {
       if (a.state === 'gone' && !(SEL && SEL.id === a.item.key)) {

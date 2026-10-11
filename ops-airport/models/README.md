@@ -11,6 +11,9 @@ These GLB files are converted from FlightGear aircraft and ground equipment, wit
 | `fuel.glb`, `cater.glb` | 787 family: `Models/Ground/Services` (Volvo FM fuel and catering trucks) | FlightGear 787 team |
 | `tug.glb` | FGAddon `pushback` | FlightGear contributors |
 | `followme.glb` | FGAddon `followme` | FlightGear contributors |
+| `bus.glb` | fgdata `Models/Transport/110Bus` | FlightGear contributors |
+| `yacht.glb`, `yacht2.glb` | fgdata `Models/Maritime/Civilian` (SailBoatUnderSail, SailBoatUnderPower11m) | FlightGear contributors |
+| `buoyR.glb`, `buoyG.glb` | fgdata `Models/Maritime/Misc` | FlightGear contributors |
 
 FGAddon: https://sourceforge.net/p/flightgear/fgaddon/HEAD/tree/trunk/Aircraft/
 
