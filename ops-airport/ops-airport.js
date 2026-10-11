@@ -1482,6 +1482,12 @@ function mount(container, opts) {
         if (m.emissiveFactor) mt.emissive = new T.Color(...m.emissiveFactor);
         mt.userData = m.extras || {};
         if (mt.userData.part === 'body' && mt.map) { mt.roughness = 0.34; mt.envMapIntensity = 1.1; }
+        if (mt.userData.part === 'glass' || mt.userData.part === 'cabin') {
+          // tinted, reflective aircraft glass; cabin panes glow warm at night
+          const g = new T.MeshPhysicalMaterial({ color: 0x0d141c, roughness: 0.04, metalness: 0.35, clearcoat: 1, clearcoatRoughness: 0.03, transparent: true, opacity: 0.82, depthWrite: false, side: T.DoubleSide, envMapIntensity: 1.6,
+            emissive: mt.userData.part === 'cabin' ? 0xffd9a0 : 0x000000, emissiveIntensity: 0 });
+          g.userData = mt.userData; return g;
+        }
         return mt;
       });
       const g = new T.Group();
@@ -1493,10 +1499,11 @@ function mount(container, opts) {
         const mt = mats[pr.material], m = new T.Mesh(geo, mt);
         m.userData.part = (mt.userData && mt.userData.part) || 'body';
         m.castShadow = !mt.transparent; m.receiveShadow = true;
-        if (m.userData.part === 'cabin') { m.visible = false; mt.emissive = new T.Color(0xffd9a0); mt.emissiveIntensity = 0; }
+        if (m.userData.part === 'glass' || m.userData.part === 'cabin') { m.castShadow = false; m.renderOrder = 2; }
         g.add(m);
       });
       g.userData.box = new T.Box3().setFromObject(g);
+      mats.forEach(mt => { if (mt.userData && mt.userData.part === 'cabin') windowMats.push(mt); });
       return g;
     });
   }

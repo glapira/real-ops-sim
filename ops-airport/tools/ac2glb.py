@@ -130,7 +130,7 @@ AC2THREE = np.array([[0, 0, 1], [0, 1, 0], [-1, 0, 0]], dtype=np.float64)   # (x
 
 def convert(ac_paths, out_path, *, scale=0.335, exclude=None, include=None, tex_dir=None, tex_max=2048, tex_override=None, tex_paint=None,
             ground=True, center=True, extra_rot=None, jpeg_quality=86, report=True, keep_alpha=None, decimate=None, offsets=None, tint=None,
-            gear_rx=r'gear|wheel|strut|tyre|tire|NLG|MLG|compressor|torque|axle|bogie', cabin_rx=r'windows-bright', ground_ignore=None):
+            gear_rx=r'gear|wheel|strut|tyre|tire|NLG|MLG|compressor|torque|axle|bogie', cabin_rx=r'windows-bright', glass_rx=r'/Window$|/Windows$|windshield|windsheild|/windows$|windows\.front|canopy|glass', ground_ignore=None):
     mats_all, objs = [], []
     items = ac_paths if isinstance(ac_paths, list) else [ac_paths]
     for k, it in enumerate(items):
@@ -174,7 +174,7 @@ def convert(ac_paths, out_path, *, scale=0.335, exclude=None, include=None, tex_
         if tex and tex_override and tex in tex_override: tex = tex_override[tex]
         texp = os.path.join(tex_dir or o['dir'], tex) if tex else None
         stats[o['name']] = len(idx)
-        part = 'gear' if re.search(gear_rx, o['name'], re.I) else ('cabin' if re.search(cabin_rx, o['name'], re.I) else 'body')
+        part = 'cabin' if re.search(cabin_rx, o['name'], re.I) else ('glass' if re.search(glass_rx, o['name'], re.I) else ('gear' if re.search(gear_rx, o['name'], re.I) else 'body'))
         for f in range(len(idx)):
             key = (texp, int(mi[f]) + o['mbase'], bool(ds[f]), part)
             g = groups.setdefault(key, {'p': [], 'n': [], 'uv': [], 'names': set()})
@@ -243,6 +243,14 @@ def write_glb(meshes, out_path, *, tex_max, tex_paint, jpeg_quality, keep_alpha,
                 tex_index[m['tex']] = (len(textures) - 1, use_alpha)
             ti = tex_index[m['tex']]
         mat = m['mat']; rgb = list(mat['rgb'])
+        if m['part'] in ('glass', 'cabin') or mat['trans'] > 0.5:
+            gm = {'pbrMetallicRoughness': {'baseColorFactor': [0.05, 0.07, 0.1, 0.78], 'metallicFactor': 0.4, 'roughnessFactor': 0.05}, 'doubleSided': True, 'alphaMode': 'BLEND',
+                  'extras': {'part': 'cabin' if m['part'] == 'cabin' else 'glass', 'names': m['names'][:40], 'tex': None}}
+            materials.append(gm)
+            attrs = {'POSITION': add_acc(m['p'], 'VEC3', 5126, 34962), 'NORMAL': add_acc(m['n'], 'VEC3', 5126, 34962)}
+            idx = m['i'].astype(np.uint16) if len(m['p']) < 65536 else m['i']
+            prims.append({'attributes': attrs, 'indices': add_acc(idx, 'SCALAR', 5123 if idx.dtype == np.uint16 else 5125, 34963), 'material': len(materials) - 1})
+            continue
         if tint and m['tex'] is None: rgb = tint(rgb, m)
         rough = max(0.18, min(0.95, 1 - (mat['shi'] / 128.0) * 0.9))
         gm = {'pbrMetallicRoughness': {'baseColorFactor': [*([1, 1, 1] if ti else rgb), 1 - mat['trans']], 'metallicFactor': 0.0, 'roughnessFactor': rough}, 'doubleSided': bool(m['ds'])}

@@ -50,11 +50,11 @@ def run(name): return ONLY is None or name in ONLY
 # ---------------------------------------------------------------- 787-8
 if run('b787'):
     items = [os.path.join(B787, '787-8.ac'), os.path.join(B787, 'GEnx.ac')]
-    ex = r'windows-dim|/Window$|wiper|/[lr]hfans$|/[lr]hfan$|GEnx\.ac/wing$|lights|beacon|tlight|navlite|landlt|lltcover|logolts|strobe'
+    ex = r'windows-dim|wiper|/[lr]hfans$|/[lr]hfan$|GEnx\.ac/wing$|lights|beacon|tlight|navlite|landlt|lltcover|logolts|strobe'
     p = tex_painter(items, {'787-8.png', '787-10.png'}, os.path.join(B787, '787-8.png'), exclude=ex)
     put_marks(p, r'/fuselage$', r'/fin$|/rudder$', word=True, reg='P4-787', word_at=0.205, word_h=0.42, word_y=0.56, reg_at=0.845, reg_h=0.17, reg_y=0.5, logo_k=0.58, logo_dx=0.08, logo_dy=0.02)
     painted = p.image()
-    ac2glb.convert(items, os.path.join(OUT, 'b787.glb'), exclude=ex, decimate=[(r'NGear$|Wheel|GearBaseRod|RGear|Compressor', 0.65), (r'cone$', 0.6), (r'windows-bright', 0.5)], tint=neutral, keep_alpha=lambda t: False, tex_override={'787-10.png': '787-8.png', 'GEnx.png': 'Liveries-engines/GEnx.png'},
+    ac2glb.convert(items, os.path.join(OUT, 'b787.glb'), exclude=ex, decimate=[(r'NGear$|Wheel|GearBaseRod|RGear|Compressor', 0.65), (r'cone$', 0.6)], tint=neutral, keep_alpha=lambda t: False, tex_override={'787-10.png': '787-8.png', 'GEnx.png': 'Liveries-engines/GEnx.png'},
                    tex_paint={'787-8.png': lambda im: painted}, tex_max=4096, report=False)
 
 # ---------------------------------------------------------------- Dornier 228 NXT (FlightGear do228 by D-ECHO)
@@ -79,7 +79,7 @@ if run('do228'):
 if run('a320'):
     R_ = os.path.join(FG, 'A320-family/Models/Fuselage/res')
     items = [os.path.join(R_, 'A320-216.ac'), os.path.join(R_, 'CFM56.ac')]
-    ex = r'Inner|Actuator|Cables|Mechanism|NurbsPath|/Rat$|Placards|Static-Elements|Cargo\d\.Inner|Light|Beacon|Strobe|Glass\b|Cockpit|Seat|Wiper'
+    ex = r'Inner|Actuator|Cables|Mechanism|NurbsPath|/Rat$|Placards|Static-Elements|Cargo\d\.Inner|Light|Beacon|Strobe|Cockpit|Seat|Wiper'
     p = tex_painter(items, 'Fuse-Main.png', os.path.join(R_, 'Fuse-Main.png'), exclude=ex)
     p.recolor(lambda rgb, sat, mx: (sat > 0.12) & (mx > 0.15))
     nose, L, cy, R = body_frame(p, r'/Fuselage$')
