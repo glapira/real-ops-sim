@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ops Airport</title>
+<style>
+  html, body { height: 100%; margin: 0; background: #dfe8ee; }
+  @media (prefers-color-scheme: dark) { html, body { background: #101a2b; } }
+  #room { position: fixed; inset: 0; }
+</style>
+</head>
+<body>
+<div id="room"></div>
+<script src="https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js"></script>
+<script src="sample-data.js"></script>
+<script src="ops-airport.js"></script>
+<script>
+  const lang = (navigator.language || 'en').startsWith('es') ? 'es' : 'en';
+  const theme = () => document.documentElement.dataset.theme || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+  const room = OpsAirport.mount(document.getElementById('room'), {
+    lang, theme: theme(), tz: 'Europe/Madrid', sample: true,
+    data: window.OPS_SAMPLE_ROOM, graph: window.OPS_SAMPLE_GRAPH,
+    onOpen: (link) => console.log('open', link)
+  });
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => room.setTheme(theme()));
+  new MutationObserver(() => room.setTheme(theme())).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+  window.room = room;
+</script>
+</body>
+</html>
