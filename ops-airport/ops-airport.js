@@ -241,6 +241,20 @@ function mount(container, opts) {
   sun.shadow.bias = -0.0006; sun.shadow.normalBias = 0.6;
   scene.add(sun); scene.add(sun.target);
   const flash = new T.AmbientLight(0xc8d6ff, 0); scene.add(flash);
+  // image-based lighting: a small gradient sky rendered into a PMREM so paint, glass and metal reflect the sky
+  const pmrem = new T.PMREMGenerator(renderer);
+  const envScene = new T.Scene();
+  const envU = { top: { value: new T.Color(0x7fb0dd) }, mid: { value: new T.Color(0xe3ebf0) }, bot: { value: new T.Color(0x7d806f) }, sunDir: { value: new T.Vector3(0.4, 0.6, 0.5) }, sunCol: { value: new T.Color(0xfff1dc) }, sunK: { value: 1 } };
+  envScene.add(new T.Mesh(new T.SphereGeometry(10, 32, 16), new T.ShaderMaterial({ side: T.BackSide, uniforms: envU,
+    vertexShader: 'varying vec3 vDir; void main(){ vDir = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
+    fragmentShader: 'uniform vec3 top, mid, bot, sunDir, sunCol; uniform float sunK; varying vec3 vDir; void main(){ vec3 d = normalize(vDir); float h = d.y; vec3 c = h > 0.0 ? mix(mid, top, pow(h, 0.6)) : mix(mid, bot, pow(-h, 0.35)); float s = max(dot(d, normalize(sunDir)), 0.0); c += sunCol * (pow(s, 90.0) * 8.0 + pow(s, 8.0) * 0.25) * sunK; gl_FragColor = vec4(c, 1.0); }' })));
+  let envRT = null, envKey = '';
+  function updateEnvMap(k, weather, top, mid) {
+    const key = Math.round(k * 8) + weather; if (key === envKey) return; envKey = key;
+    envU.top.value.copy(top); envU.mid.value.copy(mid); envU.bot.value.setHex(0x7d806f).lerp(new T.Color(0x0c1018), k);
+    envU.sunDir.value.copy(sun.position).normalize(); envU.sunCol.value.copy(sun.color); envU.sunK.value = (1 - k) * (weather === 'clear' ? 1 : 0.25);
+    const rt = pmrem.fromScene(envScene, 0.03); if (envRT) envRT.dispose(); envRT = rt; scene.environment = rt.texture;
+  }
 
   /* ---------- helpers ---------- */
   const matCache = new Map();
@@ -460,17 +474,17 @@ function mount(container, opts) {
     for (let x = -152; x <= 132; x += 8) { pts.push([x, RWY_Z - 6.4, 0]); pts.push([x, RWY_Z + 6.4, 0]); }
     for (let x = -130; x <= 118; x += 10) { pts.push([x, TWY_Z - 4.4, 1]); pts.push([x, TWY_Z + 4.4, 1]); }
     for (let i = -5; i <= 5; i++) { pts.push([-156, RWY_Z + i * 1.1, 2]); pts.push([136, RWY_Z + i * 1.1, 3]); }
-    const geo = new T.SphereGeometry(0.34, 8, 6);
+    const geo = new T.CylinderGeometry(0.12, 0.14, 0.32, 8);
     [0xfff4d6, 0x4ea3ff, 0x52e07a, 0xff4a4a].forEach((c, gi) => {
       const list = pts.filter(p => p[2] === gi);
       const m = new T.MeshBasicMaterial({ color: c }); edgeMats.push({ m, c });
       const im = new T.InstancedMesh(geo, m, list.length); const o = new T.Object3D();
-      list.forEach((p, i) => { o.position.set(p[0], 0.35, p[1]); o.updateMatrix(); im.setMatrixAt(i, o.matrix); });
+      list.forEach((p, i) => { o.position.set(p[0], 0.28, p[1]); o.updateMatrix(); im.setMatrixAt(i, o.matrix); });
       world.add(im);
     });
     // the same lights as soft glows for the night
     const gp = new Float32Array(pts.length * 3), gc = new Float32Array(pts.length * 3), cc = new T.Color();
-    pts.forEach((p, i) => { gp.set([p[0], 0.5, p[1]], i * 3); cc.setHex([0xfff1c8, 0x4ea3ff, 0x52e07a, 0xff4a4a][p[2]]); gc.set([cc.r, cc.g, cc.b], i * 3); });
+    pts.forEach((p, i) => { gp.set([p[0], 0.45, p[1]], i * 3); cc.setHex([0xfff1c8, 0x4ea3ff, 0x52e07a, 0xff4a4a][p[2]]); gc.set([cc.r, cc.g, cc.b], i * 3); });
     const gg = new T.BufferGeometry(); gg.setAttribute('position', new T.BufferAttribute(gp, 3)); gg.setAttribute('color', new T.BufferAttribute(gc, 3));
     edgeGlow = new T.Points(gg, new T.PointsMaterial({ map: GLOW, size: 3.2, vertexColors: true, transparent: true, opacity: 0, depthWrite: false, blending: T.AdditiveBlending }));
     world.add(edgeGlow);
@@ -705,7 +719,7 @@ function mount(container, opts) {
   AIRPORT_GATES.forEach(g => {
     const grp = new T.Group();
     grp.add(cyl(1.6, 1.6, 3.2, P.terminal, 0, 2.4, 0, 16));
-    const tube = new T.Group(); tube.position.set(0, 2.6, 0); grp.add(tube);
+    const tube = new T.Group(); tube.position.set(0, 1.55, 0); grp.add(tube);
     const t = box(2.2, 2.2, 1, 0xe8e3da, 0, 0, 0.5); tube.add(t);
     const head = box(2.8, 2.6, 2, 0xdcd5c9, 0, 0, 1); tube.add(head);
     const leg = cyl(0.25, 0.25, 2.6, P.steel, 0, -1.3, 0, 8); tube.add(leg);
@@ -758,22 +772,31 @@ function mount(container, opts) {
   const floodGlows = [], lampMats = [];
   let sock;
   {
-    const trunkG = new T.CylinderGeometry(0.25, 0.35, 2, 6), crownG = new T.IcosahedronGeometry(1.8, 0);
-    const spots = []; const r = seeded(42);
-    for (let x = -180; x <= 180; x += 9) spots.push([x + r() * 3, 42 + r() * 2]);
-    for (let x = -80; x <= 80; x += 10) if (Math.abs(x) > 8) spots.push([x, 27.5]);
-    for (let i = 0; i < 46; i++) spots.push([-200 + r() * 34, -4 + r() * 60]);
-    for (let i = 0; i < 46; i++) spots.push([150 + r() * 46, 10 + r() * 50]);
-    for (let i = 0; i < 26; i++) { const x = -200 + r() * 340; if (x > 30) continue; spots.push([x, -79 - r() * 10]); }
-    const trunks = new T.InstancedMesh(trunkG, mat(P.trunk), spots.length), crowns = new T.InstancedMesh(crownG, mat(P.tree, { flatShading: true }), spots.length);
-    trunks.castShadow = crowns.castShadow = true;
+    // Mediterranean planting: stone pines, cypresses and olives, smooth organic crowns
+    const r = seeded(42), spots = [];
+    for (let x = -180; x <= 180; x += 9) spots.push([x + r() * 3, 42 + r() * 2, x % 18 === 0 ? 'cypress' : 'pine']);
+    for (let x = -80; x <= 80; x += 10) if (Math.abs(x) > 8) spots.push([x, 27.5, 'cypress']);
+    for (let i = 0; i < 46; i++) spots.push([-200 + r() * 34, -4 + r() * 60, r() < 0.5 ? 'olive' : 'pine']);
+    for (let i = 0; i < 46; i++) spots.push([150 + r() * 46, 10 + r() * 50, r() < 0.5 ? 'olive' : 'pine']);
+    for (let i = 0; i < 26; i++) { const x = -200 + r() * 340; if (x > 30) continue; spots.push([x, -79 - r() * 10, r() < 0.3 ? 'cypress' : 'olive']); }
+    const lumpy = (geo, amt, seed) => { const rr = seeded(seed), pa = geo.attributes.position, v = new T.Vector3(); for (let i = 0; i < pa.count; i++) { v.fromBufferAttribute(pa, i); const n = 1 + (Math.sin(v.x * 3.1 + seed) * Math.cos(v.z * 2.7) * 0.5 + (rr() - 0.5)) * amt; pa.setXYZ(i, v.x * n, v.y * (1 + (n - 1) * 0.6), v.z * n); } geo.computeVertexNormals(); return geo; };
+    const SPEC = {
+      pine:    { trunk: new T.CylinderGeometry(0.14, 0.24, 4.6, 8).translate(0, 2.3, 0), crown: lumpy(new T.SphereGeometry(1, 18, 10).scale(3.0, 1.0, 3.0).translate(0, 5.0, 0), 0.22, 3), cm: new T.MeshStandardMaterial({ color: 0x4d6a3c, roughness: 0.95 }), tm: new T.MeshStandardMaterial({ color: 0x7a5d46, roughness: 1 }) },
+      cypress: { trunk: new T.CylinderGeometry(0.1, 0.16, 1.2, 6).translate(0, 0.6, 0), crown: lumpy(new T.LatheGeometry([[0.01, 0], [0.55, 0.5], [0.75, 2], [0.62, 4.2], [0.3, 6.2], [0.01, 7]].map(([a, b]) => new T.Vector2(a, b)), 14).translate(0, 0.9, 0), 0.12, 7), cm: new T.MeshStandardMaterial({ color: 0x334a2c, roughness: 0.95 }), tm: new T.MeshStandardMaterial({ color: 0x6b513e, roughness: 1 }) },
+      olive:   { trunk: new T.CylinderGeometry(0.16, 0.28, 1.6, 7).translate(0, 0.8, 0), crown: lumpy(new T.SphereGeometry(1, 16, 10).scale(1.9, 1.3, 1.9).translate(0, 2.4, 0), 0.28, 11), cm: new T.MeshStandardMaterial({ color: 0x7e8c64, roughness: 0.95 }), tm: new T.MeshStandardMaterial({ color: 0x6e6152, roughness: 1 }) }
+    };
     const o = new T.Object3D();
-    spots.forEach((s, i) => {
-      const k = 0.8 + r() * 0.7;
-      o.position.set(s[0], 1, s[1]); o.scale.set(k, k, k); o.rotation.set(0, r() * 6, 0); o.updateMatrix(); trunks.setMatrixAt(i, o.matrix);
-      o.position.y = 2.6 * k; o.updateMatrix(); crowns.setMatrixAt(i, o.matrix);
+    Object.entries(SPEC).forEach(([kind, sp]) => {
+      const list = spots.filter(p => p[2] === kind); if (!list.length) return;
+      const trunks = new T.InstancedMesh(sp.trunk, sp.tm, list.length), crowns = new T.InstancedMesh(sp.crown, sp.cm, list.length);
+      trunks.castShadow = crowns.castShadow = true; crowns.receiveShadow = true;
+      const col = new T.Color();
+      list.forEach((p, i) => {
+        const k = 0.75 + r() * 0.55; o.position.set(p[0], 0, p[1]); o.scale.set(k, k * (0.9 + r() * 0.25), k); o.rotation.set(0, r() * 6.28, 0); o.updateMatrix();
+        trunks.setMatrixAt(i, o.matrix); crowns.setMatrixAt(i, o.matrix); crowns.setColorAt(i, col.setHex(0xffffff).multiplyScalar(0.85 + r() * 0.25));
+      });
+      world.add(trunks, crowns);
     });
-    world.add(trunks, crowns);
     const ws = new T.Group(); ws.position.set(-60, 0, RWY_Z + 14);
     ws.add(cyl(0.12, 0.12, 6, P.steel, 0, 3, 0, 6));
     sock = mesh(new T.ConeGeometry(0.6, 3, 10, 1, true), mat(0xff9f0a, { side: T.DoubleSide }), 1.5, 5.8, 0); sock.rotation.z = Math.PI / 2;
@@ -958,133 +981,253 @@ function mount(container, opts) {
     [-1, 1].forEach(sx => { const d = make(sx); d.position.set(sx * x, y, z); d.rotation.y = sx * Math.PI / 2; g.add(d); });
   }
 
-  /* One builder for every aircraft: lathe fuselage with an upswept tail,
-     extruded wings (swept or straight, low or high), nacelles or propellers,
-     window rows, brand decals and registration. All white, as on the fleet sheet. */
-  const winGeo = new T.BoxGeometry(0.06, 0.2, 0.16);
-  function wingGeom(rootC, tipC, span, sweep, thick, side) {
-    const sh = new T.Shape(), sx = side;
-    sh.moveTo(0, rootC * 0.45); sh.lineTo(sx * span, rootC * 0.45 - sweep); sh.lineTo(sx * span, rootC * 0.45 - sweep - tipC); sh.lineTo(0, -rootC * 0.55); sh.closePath();
-    const g = new T.ExtrudeGeometry(sh, { depth: thick, bevelEnabled: true, bevelThickness: thick * 0.35, bevelSize: thick * 0.35, bevelSegments: 1 });
-    g.rotateX(Math.PI / 2); g.translate(0, thick / 2, 0); return g;
+  /* ================================================== AIRCRAFT
+     Proportions from manufacturer data at 0.335 units per metre.
+     The livery (windows, doors, panel lines, cockpit glazing, wordmark,
+     registration, cheatline) is painted into one texture wrapped on the
+     fuselage, so nothing is a stuck-on box. */
+  const PAINT = { white: '#f4f4f2', panel: 'rgba(84,94,108,0.11)', window: '#16202a', door: 'rgba(78,88,100,0.6)' };
+  const liveryCache = new Map();
+  function rrPath(x, cx, cy, w, h, r) { r = Math.min(r, w / 2, h / 2); x.beginPath(); x.moveTo(cx - w / 2 + r, cy - h / 2); x.arcTo(cx + w / 2, cy - h / 2, cx + w / 2, cy + h / 2, r); x.arcTo(cx + w / 2, cy + h / 2, cx - w / 2, cy + h / 2, r); x.arcTo(cx - w / 2, cy + h / 2, cx - w / 2, cy - h / 2, r); x.arcTo(cx - w / 2, cy - h / 2, cx + w / 2, cy - h / 2, r); x.closePath(); }
+  function drawWordmark(x, hpx) {
+    const parts = (BRAND && BRAND.parts) || []; if (!parts.length) return;
+    x.font = `700 ${hpx}px ${BRAND_FONT}`; x.textBaseline = 'middle'; x.textAlign = 'left';
+    const tw = parts.reduce((a, [t]) => a + x.measureText(t).width, 0), iconW = hpx * 1.25; let px = -(iconW + tw) / 2;
+    drawSunburst(x, px + hpx * 0.5, -hpx * 0.04, hpx * 0.2, hpx * 0.52, 10, 'left'); px += iconW;
+    parts.forEach(([t, c]) => { x.fillStyle = c; x.fillText(t, px, hpx * 0.04); px += x.measureText(t).width; });
   }
-  function nacelle(re, le, m, dark, chevron) {
-    const g = new T.Group();
-    const prof = [[re * 0.84, 0], [re, le * 0.1], [re * 0.99, le * 0.62], [re * 0.8, le * 0.9], [re * 0.5, le]];
-    const lg = new T.LatheGeometry(prof.map(([r, y]) => new T.Vector2(r, y)), 22);
-    const n = new T.Mesh(lg, m); n.rotation.x = -Math.PI / 2; n.position.z = le; n.castShadow = true; g.add(n);
-    const lip = new T.Mesh(new T.TorusGeometry(re * 0.86, re * 0.07, 6, 22), mat(0xc4c9cf, { metalness: 0.5, roughness: 0.35 })); lip.position.z = le; g.add(lip);
-    const disc = new T.Mesh(new T.CircleGeometry(re * 0.82, 20), dark); disc.position.z = le - 0.08; g.add(disc);
-    const fan = new T.Mesh(new T.ConeGeometry(re * 0.24, re * 0.4, 12), mat(0x9aa1a9, { metalness: 0.4 })); fan.rotation.x = Math.PI / 2; fan.position.z = le - 0.02; g.add(fan);
-    if (chevron) for (let i = 0; i < 12; i++) { const a = i / 12 * Math.PI * 2; const c = new T.Mesh(new T.ConeGeometry(re * 0.09, re * 0.22, 3), m); c.rotation.x = -Math.PI / 2; c.position.set(Math.cos(a) * re * 0.5, Math.sin(a) * re * 0.5, -re * 0.1); g.add(c); }
-    const core = new T.Mesh(new T.ConeGeometry(re * 0.32, re * 0.7, 14), mat(0x8d949c, { metalness: 0.5 })); core.rotation.x = -Math.PI / 2; core.position.z = -re * 0.3; g.add(core);
-    g.position.z = -le / 2; const outer = new T.Group(); outer.add(g); return outer;
+  // returns { map, glow }: paint texture and a window-only texture used for cabin lights at night
+  function liveryTexture(o) {
+    const key = [o.kind, o.reg || '', o.cheat || '', BRAND ? 1 : 0].join('|');
+    if (liveryCache.has(key)) return liveryCache.get(key);
+    const W = isPhone ? 1024 : 2048, ppu = W / o.len, H = Math.max(64, Math.round(W * 2 * Math.PI * o.r / o.len / 4) * 4);
+    const mk = () => { const c = document.createElement('canvas'); c.width = W; c.height = H; return c; };
+    const cM = mk(), cG = mk(), x = cM.getContext('2d'), gx = cG.getContext('2d');
+    const S = u => u * ppu;
+    const ty = (h, side) => { const phi = Math.acos(clamp(h, -1, 1)); return (side > 0 ? phi / (Math.PI * 2) : 1 - phi / (Math.PI * 2)) * H; };
+    x.fillStyle = PAINT.white; x.fillRect(0, 0, W, H); gx.fillStyle = '#000'; gx.fillRect(0, 0, W, H);
+    const bg = x.createLinearGradient(0, 0, 0, H); bg.addColorStop(0.3, 'rgba(110,118,128,0)'); bg.addColorStop(0.5, 'rgba(110,118,128,0.12)'); bg.addColorStop(0.7, 'rgba(110,118,128,0)'); x.fillStyle = bg; x.fillRect(0, 0, W, H);
+    x.strokeStyle = PAINT.panel; x.lineWidth = Math.max(1, S(0.01));
+    for (let sv = o.r * 1.4; sv < o.len - o.r * 1.2; sv += 0.6) { x.beginPath(); x.moveTo(S(sv), 0); x.lineTo(S(sv), H); x.stroke(); }
+    for (const side of [1, -1]) for (const h of [0.7, -0.45]) { x.beginPath(); x.moveTo(S(o.r * 1.3), ty(h, side)); x.lineTo(S(o.len - o.r * 1.5), ty(h, side)); x.stroke(); }
+    const at = (side, sv, h, fn) => { x.save(); x.translate(S(sv), ty(h, side)); if (side < 0) x.rotate(Math.PI); fn(); x.restore(); };
+    for (const side of [1, -1]) {
+      if (o.cheat) { x.fillStyle = o.cheat; x.fillRect(S(o.r * 2.4), ty(-0.12, side) - S(0.03), S(o.len - o.r * 6), S(0.06)); }
+      (o.doors || []).forEach(([sv, w, h, hc]) => {
+        x.strokeStyle = PAINT.door; x.lineWidth = Math.max(1.2, S(0.016)); rrPath(x, S(sv), ty(hc, side), S(w), S(h), S(0.07)); x.stroke();
+        x.fillStyle = PAINT.window; rrPath(x, S(sv), ty(hc + 0.28, side), S(w * 0.3), S(h * 0.14), S(0.02)); x.fill();
+        gx.fillStyle = '#ffd9a0'; rrPath(gx, S(sv), ty(hc + 0.28, side), S(w * 0.3), S(h * 0.14), S(0.02)); gx.fill();
+      });
+      const wn = o.win;
+      for (let sv = wn.s0; sv <= wn.s1 + 1e-6; sv += wn.pitch) {
+        if ((o.doors || []).some(d => Math.abs(d[0] - sv) < d[1] * 0.8)) continue;
+        if ((wn.skip || []).some(([lo, hi]) => sv > lo && sv < hi)) continue;
+        const cx = S(sv), cy = ty(wn.h, side), w = S(wn.w), h = S(wn.ht), r = S(Math.min(wn.w, wn.ht) * (wn.round ?? 0.45));
+        x.fillStyle = PAINT.window; rrPath(x, cx, cy, w, h, r); x.fill();
+        x.fillStyle = 'rgba(255,255,255,0.16)'; rrPath(x, cx - w * 0.12, cy - h * 0.16 * side, w * 0.4, h * 0.36, r * 0.4); x.fill();
+        gx.fillStyle = '#ffd9a0'; rrPath(gx, cx, cy, w, h, r); gx.fill();
+      }
+      // cockpit glazing: panes that rise toward the nose
+      const cp = o.cockpit;
+      for (let i = 0; i < cp.n; i++) {
+        const a0 = cp.s0 + i * cp.len / cp.n + 0.015, a1 = cp.s0 + (i + 1) * cp.len / cp.n - 0.015;
+        const top0 = cp.top - i * cp.drop, top1 = cp.top - (i + 1) * cp.drop, bot = cp.bot + i * cp.rise;
+        x.fillStyle = PAINT.window; x.beginPath();
+        x.moveTo(S(a0), ty(top0, side)); x.lineTo(S(a1), ty(top1, side)); x.lineTo(S(a1), ty(bot + cp.rise, side)); x.lineTo(S(a0) + (i === 0 ? S(cp.len * 0.1) : 0), ty(bot, side)); x.closePath(); x.fill();
+      }
+      if (BRAND && o.word) at(side, o.word.s, o.word.h, () => drawWordmark(x, S(o.word.size)));
+      if (o.reg && o.regPos) at(side, o.regPos.s, o.regPos.h, () => { x.font = `600 ${S(o.regPos.size)}px ${BRAND_FONT}`; x.fillStyle = '#2b2f36'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText(o.reg, 0, 0); });
+    }
+    // nose radome seam and tail cone
+    x.strokeStyle = 'rgba(84,94,108,0.25)'; x.lineWidth = Math.max(1, S(0.012)); x.beginPath(); x.moveTo(S(o.r * 0.55), 0); x.lineTo(S(o.r * 0.55), H); x.stroke();
+    const out = {};
+    [['map', cM], ['glow', cG]].forEach(([k, c]) => { const t = new T.CanvasTexture(c); t.flipY = false; if ('colorSpace' in t) t.colorSpace = T.SRGBColorSpace; t.anisotropy = Math.min(8, maxAniso); out[k] = t; });
+    liveryCache.set(key, out); return out;
   }
-  function propeller(rad, blades = 5) {
-    const g = new T.Group(), bm = mat(0x2a2e34, { roughness: 0.5 });
-    const sp = new T.Mesh(new T.ConeGeometry(rad * 0.16, rad * 0.4, 14), mat(0xf4f4f2)); sp.rotation.x = Math.PI / 2; g.add(sp);
-    for (let i = 0; i < blades; i++) { const b = new T.Mesh(new T.BoxGeometry(rad * 0.13, rad, 0.04), bm); b.geometry.translate(0, rad / 2, 0); b.rotation.z = i / blades * Math.PI * 2; b.rotation.y = 0.25; g.add(b); }
+  // planform with spanwise points so it can thin toward the tip and flex upward
+  function wingGeom(rootC, tipC, span, sweep, thick, side, bend = 0, thin = 0.55, n = 8) {
+    const sh = new T.Shape(), pts = [];
+    for (let i = 0; i <= n; i++) { const f = i / n; pts.push([side * span * f, rootC * 0.45 - sweep * f]); }
+    for (let i = n; i >= 0; i--) { const f = i / n; pts.push([side * span * f, lerp(-rootC * 0.55, rootC * 0.45 - sweep - tipC, f)]); }
+    pts.forEach(([px, py], i) => i ? sh.lineTo(px, py) : sh.moveTo(px, py)); sh.closePath();
+    const g = new T.ExtrudeGeometry(sh, { depth: thick, bevelEnabled: true, bevelThickness: thick * 0.4, bevelSize: thick * 0.45, bevelSegments: 2, curveSegments: 4 });
+    g.rotateX(Math.PI / 2); g.translate(0, thick / 2, 0);
+    const pa = g.attributes.position;
+    for (let i = 0; i < pa.count; i++) { const f = clamp(Math.abs(pa.getX(i)) / span, 0, 1); pa.setY(i, pa.getY(i) * (1 - thin * f) + bend * f * f); }
+    g.computeVertexNormals(); return g;
+  }
+  const wingLE = (o, f) => o.rootC * 0.45 - o.sweep * f, wingTE = (o, f) => lerp(-o.rootC * 0.55, o.rootC * 0.45 - o.sweep - o.tipC, f);
+  let fanTexC = null;
+  function fanTex() {
+    if (fanTexC) return fanTexC;
+    const c = document.createElement('canvas'); c.width = c.height = 256; const x = c.getContext('2d');
+    x.fillStyle = '#20262d'; x.beginPath(); x.arc(128, 128, 128, 0, Math.PI * 2); x.fill();
+    for (let i = 0; i < 22; i++) { const a = i / 22 * Math.PI * 2; x.strokeStyle = 'rgba(170,178,188,0.55)'; x.lineWidth = 7; x.beginPath(); x.moveTo(128 + Math.cos(a) * 34, 128 + Math.sin(a) * 34); x.quadraticCurveTo(128 + Math.cos(a + 0.25) * 90, 128 + Math.sin(a + 0.25) * 90, 128 + Math.cos(a + 0.42) * 124, 128 + Math.sin(a + 0.42) * 124); x.stroke(); }
+    x.fillStyle = '#d8dcdf'; x.beginPath(); x.arc(128, 128, 34, 0, Math.PI * 2); x.fill();
+    x.strokeStyle = '#2b2f36'; x.lineWidth = 5; x.beginPath(); for (let a = 0; a < 5.5; a += 0.1) { const r = 4 + a * 5; x.lineTo(128 + Math.cos(a) * r, 128 + Math.sin(a) * r); } x.stroke();
+    fanTexC = new T.CanvasTexture(c); if ('colorSpace' in fanTexC) fanTexC.colorSpace = T.SRGBColorSpace; return fanTexC;
+  }
+  const M = {
+    paintWhite: new T.MeshPhysicalMaterial({ color: 0xf4f4f2, roughness: 0.3, metalness: 0, clearcoat: 0.6, clearcoatRoughness: 0.16 }),
+    wing: new T.MeshPhysicalMaterial({ color: 0xd3d7dc, roughness: 0.4, metalness: 0.28, clearcoat: 0.3, clearcoatRoughness: 0.3, side: T.DoubleSide }),
+    metal: new T.MeshStandardMaterial({ color: 0xaeb4bb, roughness: 0.28, metalness: 0.85 }),
+    darkMetal: new T.MeshStandardMaterial({ color: 0x4a5058, roughness: 0.4, metalness: 0.7 }),
+    tyre: new T.MeshStandardMaterial({ color: 0x1d2024, roughness: 0.85 }),
+    glass: new T.MeshPhysicalMaterial({ color: 0x1a232d, roughness: 0.05, metalness: 0.1, clearcoat: 1 })
+  };
+  function nacelle(o) {
+    const g = new T.Group(), re = o.er, le = o.el;
+    const prof = [[re * 0.84, 0], [re * 0.95, le * 0.03], [re, le * 0.14], [re * 0.99, le * 0.42], [re * 0.9, le * 0.74], [re * 0.76, le]];
+    const n = new T.Mesh(new T.LatheGeometry(prof.map(([r, y]) => new T.Vector2(r, y)), 28), M.paintWhite); n.rotation.x = -Math.PI / 2; n.position.z = le / 2; n.castShadow = true; g.add(n);
+    const lip = new T.Mesh(new T.TorusGeometry(re * 0.86, re * 0.055, 8, 28), M.metal); lip.position.z = le / 2; g.add(lip);
+    const fan = new T.Mesh(new T.CircleGeometry(re * 0.84, 28), new T.MeshStandardMaterial({ map: fanTex(), roughness: 0.5, metalness: 0.4 })); fan.position.z = le / 2 - re * 0.18; g.add(fan);
+    const inner = new T.Mesh(new T.CylinderGeometry(re * 0.84, re * 0.84, re * 0.2, 28, 1, true), new T.MeshStandardMaterial({ color: 0x2a3038, side: T.BackSide })); inner.rotation.x = Math.PI / 2; inner.position.z = le / 2 - re * 0.08; g.add(inner);
+    const core = new T.Mesh(new T.LatheGeometry([[re * 0.62, 0], [re * 0.55, le * 0.22], [re * 0.3, le * 0.4], [0.01, le * 0.5]].map(([r, y]) => new T.Vector2(r, y)), 20), M.darkMetal); core.rotation.x = -Math.PI / 2; core.position.z = -le / 2; g.add(core);
+    if (o.chevron) for (let i = 0; i < 14; i++) { const a = i / 14 * Math.PI * 2; const c = new T.Mesh(new T.ConeGeometry(re * 0.12, re * 0.26, 3), M.paintWhite); c.rotation.x = -Math.PI / 2; c.position.set(Math.cos(a) * re * 0.74, Math.sin(a) * re * 0.74, -le / 2 - re * 0.11); g.add(c); }
     return g;
+  }
+  function turboprop(o) {
+    const g = new T.Group(), re = o.er, le = o.el;
+    const body = new T.Mesh(new T.CapsuleGeometry(re, le, 6, 14), M.paintWhite); body.rotation.x = Math.PI / 2; body.scale.set(1, 1, 1.25); body.castShadow = true; g.add(body);
+    const intake = new T.Mesh(new T.CylinderGeometry(re * 0.35, re * 0.4, re * 0.6, 10), M.darkMetal); intake.rotation.x = Math.PI / 2; intake.position.set(0, -re * 0.8, le * 0.35); g.add(intake);
+    const ex = new T.Mesh(new T.CylinderGeometry(re * 0.25, re * 0.3, re * 0.8, 10), M.darkMetal); ex.rotation.z = Math.PI / 2; ex.position.set(re * 0.9, 0, -le * 0.05); g.add(ex);
+    const prop = new T.Group(); prop.position.z = le / 2 + re * 1.05;
+    const spinner = new T.Mesh(new T.ConeGeometry(re * 0.75, re * 1.6, 18), M.paintWhite); spinner.rotation.x = Math.PI / 2; prop.add(spinner);
+    const bladeM = new T.MeshStandardMaterial({ color: 0x23272c, roughness: 0.55 }), tipM = new T.MeshStandardMaterial({ color: 0xd9a42a, roughness: 0.5 });
+    for (let i = 0; i < 5; i++) {
+      const bl = new T.Group(); bl.rotation.z = i / 5 * Math.PI * 2 + 0.3;
+      const b = new T.Mesh(new T.BoxGeometry(o.prop * 0.11, o.prop * 0.92, 0.035), bladeM); b.position.y = o.prop * 0.5; b.rotation.y = 0.35; bl.add(b);
+      const t = new T.Mesh(new T.BoxGeometry(o.prop * 0.1, o.prop * 0.08, 0.037), tipM); t.position.y = o.prop * 0.96; t.rotation.y = 0.35; bl.add(t);
+      prop.add(bl);
+    }
+    g.add(prop); g.userData.prop = prop; return g;
   }
   function airliner(o) {
     const g = new T.Group(); const L = o.len, R = o.r, Y = o.y;
-    const body = mat(0xf7f7f5, { roughness: 0.42 }), dark = mat(0x1b222b, { roughness: 0.3, metalness: 0.25 }), wingM = mat(0xdfe2e6, { side: T.DoubleSide, roughness: 0.5 }), engM = mat(o.engine || 0xf2f2f0, { roughness: 0.45 });
-    // fuselage
-    const prof = [[0.01, 0], [R * 0.45, R * 0.14], [R * 0.76, R * 0.52], [R * 0.94, R * 1.08], [R, R * 1.85], [R, L - R * (o.tailLen || 3.4)], [R * 0.9, L - R * (o.tailLen || 3.4) * 0.66], [R * 0.6, L - R * (o.tailLen || 3.4) * 0.32], [R * 0.24, L - 0.16], [0.02, L]];
-    const fg = new T.LatheGeometry(prof.map(([r, y]) => new T.Vector2(r, y)), 28);
-    const pa = fg.attributes.position, t0 = L - R * (o.tailLen || 3.4) * 1.05;
+    const liv = liveryTexture(o);
+    const paint = new T.MeshPhysicalMaterial({ map: liv.map, emissiveMap: liv.glow, emissive: new T.Color(0xffc98a), emissiveIntensity: 0, roughness: 0.3, metalness: 0, clearcoat: 0.6, clearcoatRoughness: 0.16 });
+    g.userData.cabin = paint;
+    // fuselage: lathe along y (nose at 0), UVs = (along, around) for the livery
+    const nl = o.noseLen, tl = o.tailLen;
+    const prof = [[0.005, 0], [R * 0.32, nl * 0.04], [R * 0.55, nl * 0.12], [R * 0.74, nl * 0.26], [R * 0.88, nl * 0.45], [R * 0.97, nl * 0.7], [R, nl], [R, L - tl], [R * 0.97, L - tl * 0.8], [R * 0.86, L - tl * 0.58], [R * 0.66, L - tl * 0.36], [R * 0.4, L - tl * 0.14], [R * 0.2, L - 0.02], [0.005, L]];
+    const fg = new T.LatheGeometry(prof.map(([r, y]) => new T.Vector2(r, y)), 40);
+    const pa = fg.attributes.position, uv = fg.attributes.uv;
     for (let i = 0; i < pa.count; i++) {
-      const y = pa.getY(i);
-      if (y > t0) { const t = (y - t0) / (L - t0); pa.setZ(i, pa.getZ(i) + Math.pow(t, 1.6) * R * (o.upsweep || 0.62)); }
-      if (y < R * 1.3) pa.setZ(i, pa.getZ(i) - (1 - y / (R * 1.3)) * R * 0.14);
-      if (o.boxy) { pa.setX(i, pa.getX(i) * 1.04); }
+      const y = pa.getY(i); uv.setXY(i, y / L, uv.getX(i));
+      let px = pa.getX(i), pz = pa.getZ(i);
+      if (o.boxy) { const r = Math.hypot(px, pz); if (r > 1e-4) { const a = Math.atan2(px, pz), k = 1 / Math.pow(Math.pow(Math.abs(Math.cos(a)), 4) + Math.pow(Math.abs(Math.sin(a)), 4), 0.25); px *= 0.5 + 0.5 * k * 0.9; pz *= 0.5 + 0.5 * k; } }
+      // tail upsweep and nose droop (z is up before the fuselage is laid along the axis)
+      if (y > L - tl) { const t = (y - (L - tl)) / tl; pz += Math.pow(t, 1.7) * R * o.upsweep; }
+      if (y < nl) { const t = 1 - y / nl; pz -= t * t * R * (o.droop ?? 0.18); }
+      pa.setX(i, px); pa.setZ(i, pz);
     }
     fg.computeVertexNormals();
-    const fus = new T.Mesh(fg, body); fus.rotation.x = -Math.PI / 2; fus.position.set(0, Y, L / 2); fus.castShadow = true; fus.receiveShadow = true; g.add(fus);
-    // cockpit glazing
-    const ck = new T.Mesh(new T.CylinderGeometry(R * 0.72, R * 0.86, R * 0.5, 20, 1, true, -1.15, 2.3), dark); ck.rotation.x = Math.PI / 2 - 0.6; ck.rotation.z = Math.PI; ck.position.set(0, Y + R * 0.42, L / 2 - R * 0.98); g.add(ck);
-    // cabin windows
-    const ws = o.winScale || 1, pitch = (o.winPitch || 0.62);
-    const nW = Math.floor((L - R * 6.2) / pitch);
-    const wins = new T.InstancedMesh(winGeo, dark, nW * 2); const o3 = new T.Object3D(); let wi = 0;
-    for (const sx of [-1, 1]) for (let i = 0; i < nW; i++) { o3.position.set(sx * R * 0.99, Y + R * 0.17, L / 2 - R * 2.5 - i * pitch); o3.scale.set(1, ws, ws); o3.updateMatrix(); wins.setMatrixAt(wi++, o3.matrix); }
-    g.add(wins);
-    if (o.cheat) for (const sx of [-1, 1]) { const st = new T.Mesh(new T.BoxGeometry(0.04, R * 0.07, L - R * 5), mat(o.cheat)); st.position.set(sx * R * 0.995, Y - R * 0.08, -R * 0.3); g.add(st); }
-    // doors
-    const doorM = mat(0xd5d9de);
-    [L / 2 - R * 2.0, -L / 2 + R * 3.6].concat(o.midDoor ? [0] : []).forEach(z => { for (const sx of [-1, 1]) { const d = new T.Mesh(new T.BoxGeometry(0.03, R * 0.95, R * 0.52), doorM); d.position.set(sx * R * 0.998, Y + R * 0.08, z); g.add(d); } });
+    const fus = new T.Mesh(fg, paint); fus.rotation.x = -Math.PI / 2; fus.position.set(0, Y, L / 2); fus.castShadow = true; fus.receiveShadow = true; g.add(fus);
+    const apu = cyl(R * 0.07, R * 0.07, 0.08, 0x2a2e34, 0, Y + R * o.upsweep, -L / 2 + 0.02, 10); apu.rotation.x = Math.PI / 2; g.add(apu);
+    // wing-to-body fairing
+    const wz = o.wingZ;
+    if (!o.high) { const bf = new T.Mesh(new T.SphereGeometry(1, 24, 12), M.paintWhite); bf.scale.set(R * 0.92, R * 0.42, o.rootC * 0.62); bf.position.set(0, Y - R * 0.62, wz - o.rootC * 0.05); g.add(bf); }
+    else { const tf = new T.Mesh(new T.SphereGeometry(1, 20, 10), M.paintWhite); tf.scale.set(R * 0.8, R * 0.3, o.rootC * 0.6); tf.position.set(0, Y + R * 0.92, wz - o.rootC * 0.05); g.add(tf); }
     // wings
-    const wz = o.wingZ ?? L * 0.06, wy = o.high ? Y + R * 0.92 : Y - R * 0.5;
-    if (o.high) g.add(box(R * 1.2, R * 0.3, o.rootC * 0.9, 0xf7f7f5, 0, Y + R * 0.88, wz - o.rootC * 0.05));
+    const wy = o.high ? Y + R * 0.97 : Y - R * 0.55, rootX = o.high ? R * 0.25 : R * 0.6;
     for (const sx of [-1, 1]) {
-      const wg = new T.Group(); wg.position.set(sx * R * (o.high ? 0.3 : 0.55), wy, wz); wg.rotation.z = sx * (o.dihedral ?? 0.07);
-      const w = new T.Mesh(wingGeom(o.rootC, o.tipC, o.span, o.sweep, o.thick || 0.22, sx), wingM); w.castShadow = true; w.receiveShadow = true; wg.add(w);
-      if (o.tips === 'winglet') { const wl = new T.Mesh(new T.BoxGeometry(0.07, R * 1.05, o.tipC * 0.85), body); wl.position.set(sx * o.span, R * 0.48, o.rootC * 0.45 - o.sweep - o.tipC * 0.5); wl.rotation.x = -0.4; wl.rotation.z = -sx * 0.12; wg.add(wl); }
-      if (o.tips === 'raked') { const rk = new T.Mesh(wingGeom(o.tipC, 0.16, o.span * 0.12, o.tipC * 0.9, 0.12, sx), wingM); rk.position.set(sx * o.span, 0.02, o.rootC * 0.45 - o.sweep); rk.rotation.z = sx * 0.08; wg.add(rk); }
-      const tipX = sx * (o.span + (o.tips === 'raked' ? o.span * 0.12 : 0.08));
-      const nav = glow(sx < 0 ? 0xff3b30 : 0x34c759, Math.max(1, R * 1.9)); nav.position.set(tipX, 0.3, o.rootC * 0.45 - o.sweep - o.tipC * 0.5); wg.add(nav); (g.userData.navs = g.userData.navs || []).push(nav);
+      const wg = new T.Group(); wg.position.set(sx * rootX, wy, wz); wg.rotation.z = sx * o.dihedral;
+      const w = new T.Mesh(wingGeom(o.rootC, o.tipC, o.span, o.sweep, o.thick, sx, o.bend || 0, o.thin ?? 0.55), M.wing); w.castShadow = true; w.receiveShadow = true; wg.add(w);
+      const tipY = o.bend || 0, tipZ = wingLE(o, 1) - o.tipC * 0.5;
+      let tipX = sx * o.span;
+      if (o.tips === 'raked') { const rk = new T.Mesh(wingGeom(o.tipC, 0.12, o.span * 0.11, o.tipC * 0.95, o.thick * 0.4, sx, 0.08, 0.3, 3), M.wing); rk.position.set(sx * o.span, tipY, wingLE(o, 1)); wg.add(rk); tipX = sx * o.span * 1.11; }
+      if (o.tips === 'winglet' || o.tips === 'sharklet') {
+        const wl = new T.Mesh(wingGeom(o.tipC * 0.9, o.tipC * 0.32, o.wingletH, o.tipC * 0.75, o.thick * 0.35, 1, 0, 0.4, 3), M.paintWhite);
+        wl.rotation.z = sx * (Math.PI / 2 - 0.2); wl.position.set(sx * o.span, tipY, wingLE(o, 1) - o.tipC * 0.05); wg.add(wl);
+      }
+      const nav = glow(sx < 0 ? 0xff3b30 : 0x34c759, 0.75); nav.position.set(tipX, tipY + 0.05, tipZ); wg.add(nav); (g.userData.navs = g.userData.navs || []).push(nav);
+      // flap track fairings
+      if (!o.high) (o.flaps || [0.22, 0.42, 0.6, 0.76]).forEach(f => { const ft = new T.Mesh(new T.CapsuleGeometry(o.thick * 0.32, o.rootC * 0.32 * (1 - f * 0.4), 4, 8), M.wing); ft.rotation.x = Math.PI / 2; ft.position.set(sx * o.span * f, -o.thick * 0.35 + (o.bend || 0) * f * f, wingTE(o, f) + o.rootC * 0.08); wg.add(ft); });
       if (o.engines === 'wing') {
-        const n = nacelle(o.er, o.el, engM, dark, o.chevron); n.position.set(sx * o.span * 0.34, -o.er * 0.95, o.rootC * 0.45 - o.sweep * 0.34 + o.el * 0.35); wg.add(n);
-        const py = new T.Mesh(new T.BoxGeometry(0.14, o.er * 0.7, o.el * 0.7), wingM); py.position.set(sx * o.span * 0.34, -o.er * 0.3, o.rootC * 0.45 - o.sweep * 0.34 + o.el * 0.1); wg.add(py);
+        const f = o.engF, n = nacelle(o); n.position.set(sx * o.span * f, -o.er * 0.66 + (o.bend || 0) * f * f, wingLE(o, f) + o.el * 0.5); n.castShadow = true; wg.add(n);
+        const py = new T.Mesh(new T.BoxGeometry(o.er * 0.18, o.er * 0.5, o.el * 0.8), M.paintWhite); py.position.set(sx * o.span * f, -o.er * 0.15 + (o.bend || 0) * f * f, wingLE(o, f) + o.el * 0.2); wg.add(py);
       }
       if (o.engines === 'prop') {
-        const ex = sx * o.span * 0.36, ez = o.rootC * 0.45 + o.el * 0.15;
-        const n = new T.Mesh(new T.CapsuleGeometry(o.er, o.el, 4, 12), engM); n.rotation.x = Math.PI / 2; n.position.set(ex, -o.er * 0.15, ez - o.el * 0.35); n.scale.set(1, 1, 1.15); wg.add(n);
-        const pr = propeller(o.prop || 0.45, 5); pr.position.set(ex, -o.er * 0.15, ez + o.el * 0.28 + o.er); wg.add(pr); (g.userData.props = g.userData.props || []).push(pr);
+        const f = o.engF, tp = turboprop(o); tp.position.set(sx * o.span * f, -o.er * 0.15, wingLE(o, f) - o.el * 0.1); wg.add(tp); (g.userData.props = g.userData.props || []).push(tp.userData.prop);
       }
       g.add(wg);
     }
     if (o.engines === 'rear') for (const sx of [-1, 1]) {
-      const n = nacelle(o.er, o.el, engM, dark, false); n.position.set(sx * (R + o.er * 1.15), Y + R * 0.38, -L / 2 + R * 3.4); g.add(n);
-      const py = new T.Mesh(new T.BoxGeometry(o.er * 1.2, 0.12, o.el * 0.5), body); py.position.set(sx * (R + o.er * 0.4), Y + R * 0.38, -L / 2 + R * 3.4); g.add(py);
+      const n = nacelle(o); n.position.set(sx * (R + o.er * 1.25), Y + R * 0.42, o.rearZ); g.add(n);
+      const py = new T.Mesh(new T.BoxGeometry(o.er * 1.3, o.er * 0.22, o.el * 0.5), M.paintWhite); py.position.set(sx * (R + o.er * 0.45), Y + R * 0.42, o.rearZ - o.el * 0.05); g.add(py);
     }
-    // fin (white, the brand mark sits on it)
-    const fh = o.finH, fc = o.finC, fsw = fh * (o.finSweep ?? 0.85);
-    const fs = new T.Shape(); fs.moveTo(0, 0); fs.lineTo(fc, 0); fs.lineTo(fc * 0.92 + fsw * 0.35, fh); fs.lineTo(fsw * 0.35 + fc * 0.42, fh); fs.lineTo(fc * 0.12, fh * 0.3); fs.closePath();
-    const fgeo = new T.ExtrudeGeometry(fs, { depth: 0.16, bevelEnabled: true, bevelThickness: 0.05, bevelSize: 0.05, bevelSegments: 1 }); fgeo.rotateY(Math.PI / 2); fgeo.translate(-0.08, 0, 0);
-    const finZ = -L / 2 + fc + R * 0.4, finY = Y + R * 0.72;
-    const fin = new T.Mesh(fgeo, body); fin.position.set(0, finY, finZ); fin.castShadow = true; g.add(fin);
+    // fin: tapered slab with a dorsal fillet, brand mark on both sides
+    const fh = o.finH, fc = o.finC, fsw = o.finSweep, ft = o.finT;
+    const fs = new T.Shape(); fs.moveTo(-fc * 0.32, 0); fs.lineTo(fc, 0); fs.lineTo(fsw + fc * 0.45, fh); fs.lineTo(fsw + fc * 0.04, fh); fs.lineTo(fsw * 0.14, fh * 0.14); fs.closePath();
+    const fgeo = new T.ExtrudeGeometry(fs, { depth: ft, bevelEnabled: true, bevelThickness: ft * 0.4, bevelSize: ft * 0.4, bevelSegments: 2 }); fgeo.rotateY(Math.PI / 2); fgeo.translate(-ft / 2, 0, 0);
+    { const fp = fgeo.attributes.position; for (let i = 0; i < fp.count; i++) fp.setX(i, fp.getX(i) * (1 - 0.5 * clamp(fp.getY(i) / fh, 0, 1))); fgeo.computeVertexNormals(); }
+    const finZ = -L / 2 + o.finZ, finY = Y + R * 0.78;
+    const fin = new T.Mesh(fgeo, M.paintWhite); fin.position.set(0, finY, finZ); fin.castShadow = true; g.add(fin);
     if (BRAND && o.logo !== false) {
-      const sz = Math.min(fh * 0.92, fc * 1.05);
-      [-1, 1].forEach(sx => { const d = decal(tailTex(sx < 0 ? 'right' : 'left'), sz, sz); d.position.set(sx * 0.17, finY + fh * 0.5, finZ - fc * 0.42 - fsw * 0.17); d.rotation.y = sx * Math.PI / 2; g.add(d); });
+      const sz = fh * 0.82;
+      [-1, 1].forEach(sx => { const d = decal(tailTex(sx < 0 ? 'right' : 'left'), sz, sz); d.position.set(sx * (ft * 0.62 + 0.02), finY + fh * 0.52, finZ - fsw * 0.52 - fc * 0.36); d.rotation.y = sx * Math.PI / 2; g.add(d); });
     }
-    // horizontal stabiliser (on the fin top for a T-tail)
-    const hy = o.ttail ? finY + fh - 0.06 : Y + R * 0.3, hz = o.ttail ? finZ - fc * 0.5 - fsw * 0.3 : -L / 2 + R * 1.9;
-    for (const sx of [-1, 1]) { const hs = new T.Mesh(wingGeom(o.rootC * (o.hsC || 0.42), o.tipC * 0.55, o.span * (o.hsSpan || 0.34), o.sweep * 0.3, 0.1, sx), o.ttail ? body : wingM); hs.position.set(sx * (o.ttail ? 0.05 : R * 0.3), hy, hz); hs.castShadow = true; g.add(hs); }
-    // wordmark and registration
-    if (BRAND && o.word !== false) { const ww = Math.min(L * 0.2, R * 2.7), wh = ww * 192 / 1024; sides(g, () => decal(wordTex(), ww, wh), R * 0.85, Y + R * 0.57, L / 2 - R * 2.3 - ww * 0.5); }
-    if (o.reg) { const rw = R * 2.0, rh = rw * 96 / 512; sides(g, () => decal(regTex(o.reg), rw, rh), R * (o.engines === 'rear' ? 1.0 : 0.93), Y + R * (o.engines === 'rear' ? 0.05 : 0.48), -L / 2 + R * (o.engines === 'rear' ? 4.4 : 5.2)); }
-    // gear
+    // horizontal stabiliser
+    const hsO = { rootC: o.hsC, tipC: o.hsC * 0.4, sweep: o.hsSweep, span: o.hsSpan };
+    const hy = o.ttail ? finY + fh - ft * 0.2 : Y + R * 0.18, hz = o.ttail ? finZ - fsw - o.hsC * 0.1 : -L / 2 + o.hsZ;
+    for (const sx of [-1, 1]) { const hs = new T.Mesh(wingGeom(hsO.rootC, hsO.tipC, hsO.span, hsO.sweep, o.thick * 0.55, sx, 0, 0.4, 3), o.ttail ? M.paintWhite : M.wing); hs.position.set(sx * (o.ttail ? ft * 0.4 : R * 0.45), hy, hz); hs.rotation.z = sx * (o.hsDihedral || 0.06); hs.castShadow = true; g.add(hs); }
+    // antennas
+    [[0, Y + R * 0.99, L * 0.18], [0, Y - R * 0.99, L * 0.05]].forEach(([ax, ay, az], i) => { const an = box(0.02, R * 0.16, R * 0.22, 0x3a3f46, ax, ay + (i ? -R * 0.08 : R * 0.08), az); an.rotation.x = 0.3; g.add(an); });
+    // landing gear
     const gear = new T.Group(); g.add(gear);
-    const tyre = mat(0x1f2328), strut = mat(0xc8ccd2, { metalness: 0.5, roughness: 0.4 });
-    const mainY = o.high ? R * 0.2 : Y - R * 0.6;
-    [[0, L / 2 - R * 2.6, 1, 0.24], [-R * (o.high ? 1.15 : 1.05), wz - (o.high ? -0.1 : 0.4), o.mainWheels || 2, 0.3], [R * (o.high ? 1.15 : 1.05), wz - (o.high ? -0.1 : 0.4), o.mainWheels || 2, 0.3]].forEach(([x, z, n, wr], idx) => {
-      const top = idx === 0 ? Y - R * 0.6 : mainY + 0.25; const wrr = wr * (o.wheel || 1);
-      gear.add(cyl(0.06, 0.06, Math.max(0.1, top - wrr), strut, x, (top - wrr) / 2 + wrr, z, 6));
-      for (let k = 0; k < n; k++) { const w = cyl(wrr, wrr, 0.22, tyre, x + (n > 1 ? (k - (n - 1) / 2) * 0.28 : 0), wrr, z, 12); w.rotation.z = Math.PI / 2; gear.add(w); }
-    });
-    if (o.high) for (const sx of [-1, 1]) { const sp = new T.Mesh(new T.CapsuleGeometry(R * 0.32, o.rootC * 0.8, 4, 10), body); sp.rotation.x = Math.PI / 2; sp.position.set(sx * R * 0.95, Y - R * 0.55, wz); g.add(sp); }
+    const bottom = Y - R;
+    const leg = (x, z, wheels, wr, len) => {
+      const top = o.high ? Y - R * 0.55 : bottom + 0.05;
+      gear.add(new T.Mesh(new T.CylinderGeometry(wr * 0.22, wr * 0.22, Math.max(0.05, top - wr), 8), M.metal).translateX(x).translateY((top + wr) / 2).translateZ(z));
+      if (wheels === 4) { for (const dz of [-1, 1]) for (const dx of [-1, 1]) { const w = new T.Mesh(new T.CylinderGeometry(wr, wr, wr * 0.65, 16), M.tyre); w.rotation.z = Math.PI / 2; w.position.set(x + dx * wr * 0.75, wr, z + dz * wr * 1.15); gear.add(w); } gear.add(new T.Mesh(new T.BoxGeometry(wr * 0.3, wr * 0.3, wr * 2.6), M.metal).translateX(x).translateY(wr).translateZ(z)); }
+      else for (let k = 0; k < wheels; k++) { const w = new T.Mesh(new T.CylinderGeometry(wr, wr, wr * 0.65, 16), M.tyre); w.rotation.z = Math.PI / 2; w.position.set(x + (wheels > 1 ? (k - 0.5) * wr * 1.4 : 0), wr, z); gear.add(w); const hub = new T.Mesh(new T.CircleGeometry(wr * 0.55, 12), M.metal); hub.position.set(x + (wheels > 1 ? (k - 0.5) * wr * 1.4 : 0) + (k ? 1 : -1) * wr * 0.34, wr, z); hub.rotation.y = (k ? 1 : -1) * Math.PI / 2; gear.add(hub); }
+    };
+    leg(0, L / 2 - o.noseGear, 2 - (o.noseWheels === 1 ? 1 : 0), o.wheelR * 0.8, 0);
+    for (const sx of [-1, 1]) leg(sx * o.mainX, wz - o.rootC * 0.12, o.mainWheels, o.wheelR, 0);
+    if (o.high) for (const sx of [-1, 1]) { const sp = new T.Mesh(new T.CapsuleGeometry(R * 0.38, o.rootC * 1.2, 6, 12), M.paintWhite); sp.rotation.x = Math.PI / 2; sp.scale.set(1, 1, 0.75); sp.position.set(sx * R * 0.95, Y - R * 0.62, wz - o.rootC * 0.12); sp.castShadow = true; g.add(sp); }
     // lights
     const strobe = glow(0xffffff, 3, 0); strobe.position.set(0, Y + R + 0.2, 0); g.add(strobe);
-    const land = glow(0xfff6dd, 5, 0); land.position.set(0, Y - R * 0.2, L / 2 + 0.6); g.add(land);
-    const beacon = glow(0xff3b30, 1.5, 0); beacon.position.set(0, Y + R + 0.05, -L * 0.1); g.add(beacon);
+    const land = glow(0xfff6dd, 5, 0); land.position.set(0, Y - R * 0.3, L / 2 + 0.6); g.add(land);
+    const beacon = glow(0xff3b30, 1.4, 0); beacon.position.set(0, Y + R + 0.04, -L * 0.08); g.add(beacon);
     g.traverse(c => { if (c.isMesh && !c.material.transparent) c.castShadow = true; });
-    return { g, gear, navs: g.userData.navs, strobe, land, beacon };
+    return { g, gear, navs: g.userData.navs, strobe, land, beacon, cabin: paint };
   }
-  /* Sizes keep real proportions at 0.335 units per metre:
-     A320-class work flights 37.6 m, 787-8 56.7 m, Global 8000 33.8 m, Do 228 NXT 16.6 m. */
-  function makeJet(typeHex, reg) {
-    return airliner({ len: 12.6, r: 0.88, y: 1.95, cheat: typeHex, engine: 0xf2f2f0, span: 5.4, rootC: 2.5, tipC: 0.72, sweep: 2.1, thick: 0.2, tips: 'winglet', engines: 'wing', er: 0.5, el: 1.9, finH: 2.9, finC: 2.5, reg });
-  }
-  function makeB787(reg) {
-    return airliner({ len: 19, r: 1.2, y: 2.6, engine: 0xf2f2f0, span: 8.4, rootC: 3.7, tipC: 0.85, sweep: 3.7, thick: 0.24, tips: 'raked', engines: 'wing', er: 0.82, el: 3.1, chevron: true, finH: 4.6, finC: 3.9, dihedral: 0.1, reg, midDoor: true, winScale: 0.9, winPitch: 0.5, mainWheels: 4 }).g;
-  }
-  function makeGlobal(reg) {
-    return airliner({ len: 11.3, r: 0.76, y: 1.7, engine: 0xf4f4f2, span: 4.55, rootC: 2.2, tipC: 0.55, sweep: 2.3, thick: 0.14, tips: 'winglet', engines: 'rear', er: 0.46, el: 2.0, finH: 2.6, finC: 2.2, ttail: true, hsSpan: 0.42, wingZ: 0.25, dihedral: 0.05, reg, logo: false, word: false, winScale: 1.45, winPitch: 0.74, tailLen: 4.2 }).g;
-  }
-  function makeDo228(reg) {
-    return airliner({ len: 5.55, r: 0.42, y: 0.88, engine: 0xf4f4f2, span: 2.55, rootC: 0.68, tipC: 0.52, sweep: 0.06, thick: 0.08, tips: 'none', engines: 'prop', er: 0.16, el: 0.8, prop: 0.45, finH: 1.35, finC: 1.0, finSweep: 0.75, high: true, dihedral: 0, wingZ: 0.35, reg, winPitch: 0.42, tailLen: 3.2, upsweep: 0.9, hsSpan: 0.55, hsC: 0.9, mainWheels: 1, wheel: 0.8, boxy: true, winScale: 0.62 }).g;
-  }
+  /* type presets (metres x 0.335) */
+  const TYPES = {
+    a320: R => ({ kind: 'a320', len: 12.6, r: 0.66, y: 1.07, noseLen: 1.25, tailLen: 3.0, upsweep: 0.6, droop: 0.2,
+      win: { s0: 2.05, s1: 10.3, pitch: 0.178, w: 0.075, ht: 0.11, h: 0.2 }, doors: [[1.75, 0.27, 0.6, 0.02], [10.85, 0.27, 0.6, 0.02], [5.55, 0.17, 0.32, 0.12], [5.85, 0.17, 0.32, 0.12]],
+      cockpit: { s0: 0.42, len: 0.62, n: 3, top: 0.86, drop: 0.07, bot: 0.5, rise: 0.04 },
+      span: 5.6, rootC: 2.1, tipC: 0.5, sweep: 2.5, thick: 0.15, bend: 0.12, dihedral: 0.08, wingZ: 0.6, tips: 'sharklet', wingletH: 0.8,
+      engines: 'wing', er: 0.37, el: 1.35, engF: 0.33, finH: 2.0, finC: 1.9, finSweep: 1.35, finT: 0.14, finZ: 2.45,
+      hsC: 0.95, hsSweep: 0.75, hsSpan: 1.95, hsZ: 1.1, noseGear: 1.65, mainX: 1.27, mainWheels: 2, wheelR: 0.19,
+      regPos: { s: 10.0, h: 0.5, size: 0.17 }, word: { s: 3.2, h: 0.58, size: 0.2 } }),
+    b787: R => ({ kind: 'b787', len: 19.0, r: 0.97, y: 1.6, noseLen: 2.0, tailLen: 4.6, upsweep: 0.62, droop: 0.22,
+      win: { s0: 2.85, s1: 16.4, pitch: 0.19, w: 0.09, ht: 0.155, h: 0.2 }, doors: [[2.35, 0.36, 0.63, 0.02], [6.4, 0.36, 0.63, 0.02], [12.1, 0.36, 0.63, 0.02], [17.0, 0.36, 0.63, 0.02]],
+      cockpit: { s0: 0.62, len: 0.95, n: 2, top: 0.83, drop: 0.09, bot: 0.47, rise: 0.05 },
+      span: 9.5, rootC: 3.9, tipC: 0.75, sweep: 5.6, thick: 0.22, bend: 0.55, thin: 0.6, dihedral: 0.05, wingZ: 0.7, tips: 'raked',
+      engines: 'wing', er: 0.6, el: 1.85, engF: 0.32, chevron: true, finH: 3.1, finC: 3.0, finSweep: 2.5, finT: 0.2, finZ: 3.7,
+      hsC: 1.5, hsSweep: 1.4, hsSpan: 3.0, hsZ: 1.6, noseGear: 2.4, mainX: 1.6, mainWheels: 4, wheelR: 0.21,
+      regPos: { s: 16.1, h: 0.5, size: 0.22 }, word: { s: 4.35, h: 0.58, size: 0.33 } }),
+    global: R => ({ kind: 'global', len: 11.33, r: 0.45, y: 0.66, noseLen: 1.45, tailLen: 2.6, upsweep: 0.35, droop: 0.12,
+      win: { s0: 2.55, s1: 7.2, pitch: 0.335, w: 0.13, ht: 0.17, h: 0.12, round: 0.5 }, doors: [[1.75, 0.3, 0.56, -0.02]],
+      cockpit: { s0: 0.4, len: 0.8, n: 3, top: 0.82, drop: 0.08, bot: 0.45, rise: 0.06 },
+      span: 4.95, rootC: 1.55, tipC: 0.38, sweep: 3.0, thick: 0.11, bend: 0.16, dihedral: 0.05, wingZ: -0.3, tips: 'winglet', wingletH: 0.55,
+      engines: 'rear', er: 0.27, el: 1.15, rearZ: -2.7, finH: 1.45, finC: 1.5, finSweep: 1.55, finT: 0.1, finZ: 1.55, ttail: true,
+      hsC: 0.6, hsSweep: 0.75, hsSpan: 1.55, hsZ: 0, noseGear: 1.3, mainX: 0.92, mainWheels: 2, wheelR: 0.14, logo: false,
+      regPos: { s: 8.55, h: 0.15, size: 0.12 } }),
+    do228: R => ({ kind: 'do228', len: 5.55, r: 0.31, y: 0.55, noseLen: 1.0, tailLen: 2.0, upsweep: 0.75, droop: 0.4, boxy: true,
+      win: { s0: 1.6, s1: 3.5, pitch: 0.32, w: 0.12, ht: 0.13, h: 0.12, round: 0.3 }, doors: [[3.95, 0.4, 0.48, -0.05]],
+      cockpit: { s0: 0.62, len: 0.42, n: 2, top: 0.8, drop: 0.08, bot: 0.4, rise: 0.06 },
+      span: 2.74, rootC: 0.66, tipC: 0.46, sweep: 0.06, thick: 0.08, bend: 0, thin: 0.3, dihedral: 0, wingZ: 0.5, high: true, tips: 'none',
+      engines: 'prop', er: 0.115, el: 0.8, engF: 0.24, prop: 0.45, finH: 0.95, finC: 0.75, finSweep: 0.62, finT: 0.06, finZ: 0.85,
+      hsC: 0.5, hsSweep: 0.18, hsSpan: 1.0, hsZ: 0.5, hsDihedral: 0.04, noseGear: 0.75, noseWheels: 1, mainX: 0.3, mainWheels: 1, wheelR: 0.13,
+      regPos: { s: 4.4, h: 0.15, size: 0.1 }, word: { s: 1.1, h: 0.05, size: 0.09 } })
+  };
+  function build(type, extra) { return airliner(Object.assign(TYPES[type](), extra || {})); }
+  function makeJet(typeHex, reg) { return build('a320', { cheat: '#' + new T.Color(typeHex).getHexString(), reg, word: TYPES.a320().word }); }
+  function makeB787(reg) { return build('b787', { reg }).g; }
+  function makeGlobal(reg) { return build('global', { reg }).g; }
+  function makeDo228(reg) { return build('do228', { reg }).g; }
   const fleetObjs = [];
   const FLEET = (opts.fleet && opts.fleet.length ? opts.fleet : [{ reg: '787-8', type: 'b787', label: 'Boeing 787-8' }, { reg: 'G8000', type: 'global', label: 'Bombardier Global 8000' }, { reg: '228NXT', type: 'do228', label: 'Dornier 228 NXT' }]).slice(0, 3);
   const FLEET_SPOT = { b787: [-100, -28], global: [-124, -26], do228: [-82, -31] };
@@ -1119,8 +1262,8 @@ function mount(container, opts) {
       img.data[k] = (nx / l * 0.5 + 0.5) * 255; img.data[k + 1] = (ny / l * 0.5 + 0.5) * 255; img.data[k + 2] = (nz / l * 0.5 + 0.5) * 255; img.data[k + 3] = 255;
     }
     x.putImageData(img, 0, 0);
-    const nt = new T.CanvasTexture(c); nt.wrapS = nt.wrapT = T.RepeatWrapping; nt.repeat.set(1600 / 26, 900 / 26);
-    seaMat = new T.MeshStandardMaterial({ color: 0x2a5f7a, roughness: 0.2, metalness: 0.08, normalMap: nt, normalScale: new T.Vector2(0.55, 0.55) });
+    const nt = new T.CanvasTexture(c); nt.wrapS = nt.wrapT = T.RepeatWrapping; nt.repeat.set(1600 / 64, 900 / 64);
+    seaMat = new T.MeshStandardMaterial({ color: 0x2a5f7a, roughness: 0.2, metalness: 0.08, normalMap: nt, normalScale: new T.Vector2(0.35, 0.35) });
     const sea = new T.Mesh(new T.PlaneGeometry(1600, 900), seaMat); sea.rotation.x = -Math.PI / 2; sea.position.set(0, SEA_Y, COAST_Z - 450); sea.receiveShadow = true; world.add(sea);
     // beach and surf
     const st = TEX.sand.clone(); st.needsUpdate = true; st.repeat.set(1400 / 30, 12 / 30);
@@ -1434,7 +1577,8 @@ function mount(container, opts) {
     ac.gear.scale.y = Math.max(0.01, ac.gearS); ac.gear.visible = ac.gearS > 0.05;
     const airborne = ['approach', 'climb', 'takeoff', 'roll'].includes(ac.state);
     ac.strobe.material.opacity = airborne ? ((SIM.t * 1.3) % 1 < 0.08 ? 1 : 0) : 0;
-    ac.navs.forEach(n => n.material.opacity = 0.25 + ENV.night * 0.75);
+    ac.navs.forEach(n => { n.material.opacity = 0.15 + ENV.night * 0.85; n.scale.setScalar(0.75 + ENV.night * 1.2); });
+    if (ac.cabin) ac.cabin.emissiveIntensity = ENV.night * 0.9;
     const moving = ac.state !== 'onBlock';
     ac.land.material.opacity = (airborne || ac.state === 'taxiIn' || ac.state === 'taxiOut') ? 0.25 + ENV.night * 0.75 : 0;
     ac.beacon.material.opacity = moving ? ((SIM.t * 1.1 + 0.4) % 1 < 0.12 ? 1 : 0.08) : 0;
@@ -1561,7 +1705,7 @@ function mount(container, opts) {
     scene.background.copy(bg); scene.fog.color.copy(bg);
     scene.fog.near = lerp(SKY.day.fn, SKY.night.fn, k) * wx.fog; scene.fog.far = lerp(SKY.day.ff, SKY.night.ff, k) * (0.35 + wx.fog * 0.65);
     hemi.color.copy(mix(SKY.day.hs, SKY.night.hs, SKY.dusk.hs)); hemi.groundColor.copy(mix(SKY.day.hg, SKY.night.hg, SKY.dusk.hg));
-    hemi.intensity = lerp(SKY.day.hi, SKY.night.hi, k) * LS * (wx.tint ? 0.92 : 1);
+    hemi.intensity = lerp(SKY.day.hi, SKY.night.hi, k) * LS * (wx.tint ? 0.92 : 1) * 0.6;
     sun.color.copy(mix(SKY.day.sun, SKY.night.sun, SKY.dusk.sun)); sun.intensity = lerp(SKY.day.si, SKY.night.si, k) * LS * wx.sun;
     const ang = ((clamp(h, 6, 21) - 6) / 15) * Math.PI;
     sun.position.set(Math.cos(ang) * 260 + 30, 160 + Math.sin(ang) * 140, 150); sun.target.position.set(0, 0, -15);
@@ -1582,11 +1726,11 @@ function mount(container, opts) {
     c1.setHex(0x6fa3d8).lerp(c2.setHex(0x050a16), k); c1.lerp(c3.setHex(0x5a6ea8), dusk * 0.5);
     if (wx.tint) c1.lerp(c2.setHex(wx.tint).multiplyScalar(1 - k * 0.8), 0.7);
     skyU.top.value.copy(c1); skyU.mid.value.copy(bg); skyU.sunDir.value.copy(sun.position).normalize();
-    skyU.sunCol.value.copy(sun.color); skyU.glowK.value = (1 - k * 0.85) * (ENV.weather === 'clear' ? 1 : 0.3);
+    skyU.sunCol.value.copy(sun.color); updateEnvMap(k, ENV.weather, c1, bg); skyU.glowK.value = (1 - k * 0.85) * (ENV.weather === 'clear' ? 1 : 0.3);
     clouds.mat.color.setHex(0xffffff).lerp(c2.setHex(0x2c3550), k * 0.85); if (wx.tint) clouds.mat.color.lerp(c2.setHex(wx.tint), 0.5);
     hillMat.color.setHex(0x9db08f).lerp(c2.setHex(0x1c2433), k * 0.6);
     seaMat.color.setHex(0x2a5f7a).lerp(c2.setHex(0x0a1626), k * 0.92); if (wx.tint) seaMat.color.lerp(c2.setHex(wx.tint).multiplyScalar(0.55), 0.35);
-    seaMat.normalScale.setScalar(ENV.weather === 'storm' ? 1.2 : ENV.weather === 'rain' ? 0.8 : 0.55);
+    seaMat.normalScale.setScalar(ENV.weather === 'storm' ? 0.9 : ENV.weather === 'rain' ? 0.55 : 0.35);
     brainHalo.material.opacity = 0.3 + k * 0.2 + ENV.brainPulse * 0.4;
   }
 
