@@ -20,6 +20,12 @@
   const theme = () => document.documentElement.dataset.theme || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
   const room = OpsAirport.mount(document.getElementById('room'), {
     lang, theme: theme(), tz: 'Europe/Madrid', sample: true,
+    brand: { parts: [['SOLID', '#E07B24'], ['AIRE', '#6B3A1E']], ramp: ['#F4A53C', '#E07B24', '#9A5426', '#4A2A17'] },
+    fleet: [
+      { reg: 'P4-787', type: 'b787', label: 'Boeing 787-8' },
+      { reg: 'P4-8000', type: 'global', label: 'Bombardier Global 8000' },
+      { reg: 'DO228NXT', type: 'do228', label: 'Dornier 228 NXT' }
+    ],
     data: window.OPS_SAMPLE_ROOM, graph: window.OPS_SAMPLE_GRAPH,
     onOpen: (link) => console.log('open', link)
   });

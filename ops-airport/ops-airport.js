@@ -73,10 +73,10 @@ const STEP_KEYS = ['On block', 'Read', 'Check', 'Book', 'File', 'Pushback'];
 
 /* gates per team */
 const TEAMS = [
-  { team: 'cloud',  id: 'A', x: -54, color: '#0A84FF' },
-  { team: 'ledger', id: 'B', x: -24, color: '#FF9F0A' },
-  { team: 'mac',    id: 'C', x: 24,  color: '#BF5AF2' },
-  { team: 'code',   id: 'D', x: 54,  color: '#30D158' }
+  { team: 'cloud',  id: 'A', x: -54, color: '#3E6A93' },
+  { team: 'ledger', id: 'B', x: -24, color: '#D9782D' },
+  { team: 'mac',    id: 'C', x: 24,  color: '#8A6A4C' },
+  { team: 'code',   id: 'D', x: 54,  color: '#4E7D66' }
 ];
 const FLIGHT_PREFIX = { A: 'JRV', B: 'LDG', C: 'MAC', D: 'DEV' };
 const TYPE_OF_AGENT = { jarvis: 'mail', 'contract-desk': 'contract', 'second-opinion': 'contract', reader: 'invoice', assistant: 'invoice', 'mac-clerk': 'file', 'memory-curator': 'file' };
@@ -204,9 +204,9 @@ function mount(container, opts) {
     terminal: 0xf5f3ef, glass: 0x9fc4d6, roof: 0xe4ded4, steel: 0xb4b9c0, tower: 0xf3f0ea,
     yellow: 0xf2c14e, tug: 0xf2c14e, fuel: 0x5b8def, road: 0x8b8e93, tree: 0x86a872, trunk: 0x8b6b4a,
     skin: [0xf1c7a3, 0xd9a07a, 0xa8714f, 0x7b4a32, 0xf6d8bf],
-    shirt: { A: 0x0a84ff, B: 0xff9f0a, C: 0xbf5af2, D: 0x30d158 },
-    livery: { mail: 0x0a84ff, invoice: 0xff9f0a, contract: 0xbf5af2, code: 0x30d158, file: 0xc8823c },
-    node: { card: 0x30d158, party: 0x0a84ff, note: 0xbf5af2, doc: 0xc8823c, person: 0x64d2ff, other: 0xffd60a }
+    shirt: { A: 0x3e6a93, B: 0xd9782d, C: 0x8a6a4c, D: 0x4e7d66 },
+    livery: { mail: 0x3e6a93, invoice: 0xd9782d, contract: 0x6b3a1e, code: 0x4e7d66, file: 0xa8875a },
+    node: { card: 0x4caf72, party: 0x4f86b8, note: 0xd4a95a, doc: 0xc0712f, person: 0x6fb3c2, other: 0xd9c27a }
   };
 
   const renderer = new T.WebGLRenderer({ canvas, antialias: !isPhone || window.devicePixelRatio < 2, powerPreference: 'high-performance', alpha: false });
@@ -645,7 +645,7 @@ function mount(container, opts) {
       const rnd = seeded(hashStr(String(n.id)));
       const c = brainShape(rnd, 0.02, typeAnchor[n.type] || null);
       centers.push({ node: n, p: c });
-      const hex = n.type === 'card' ? (/(sign|firm|won|paid|done)/i.test(n.stage || '') ? 0x30d158 : /(declin|lost|rechaz)/i.test(n.stage || '') ? 0x8e8e93 : 0xff9f0a) : (P.node[n.type] || P.node.other);
+      const hex = n.type === 'card' ? (/(sign|firm|won|paid|done)/i.test(n.stage || '') ? 0x4caf72 : /(declin|lost|rechaz)/i.test(n.stage || '') ? 0x8e8e93 : 0xe07b24) : (P.node[n.type] || P.node.other);
       for (let j = 0; j < per; j++) {
         const off = V(rnd() - 0.5, rnd() - 0.5, rnd() - 0.5).multiplyScalar(0.42 + (n.weight ? Math.min(3, n.weight) * 0.08 : 0));
         col.setHex(hex); if (!n.hot) col.lerp(white, 0.12);
@@ -710,6 +710,7 @@ function mount(container, opts) {
 
   /* ---------- signs ---------- */
   function roundRect(x, a, b, w, h, r) { x.beginPath(); x.moveTo(a + r, b); x.arcTo(a + w, b, a + w, b + h, r); x.arcTo(a + w, b + h, a, b + h, r); x.arcTo(a, b + h, a, b, r); x.arcTo(a, b, a + w, b, r); x.closePath(); }
+  const signs = [];
   function signSprite(code, name, color, w = 12.8) {
     const c = document.createElement('canvas'); c.width = 640; c.height = 160;
     const x = c.getContext('2d');
@@ -719,7 +720,7 @@ function mount(container, opts) {
     x.fillText(code, 80, 84);
     x.fillStyle = '#f5f5f7'; x.textAlign = 'left'; x.font = '700 54px -apple-system, "SF Pro Text", "Helvetica Neue", Arial, sans-serif'; x.fillText(name, 168, 82);
     const t = new T.CanvasTexture(c); if ('colorSpace' in t) t.colorSpace = T.SRGBColorSpace;
-    const s = new T.Sprite(new T.SpriteMaterial({ map: t, transparent: true, depthWrite: false })); s.scale.set(w, w / 4, 1); return s;
+    const s = new T.Sprite(new T.SpriteMaterial({ map: t, transparent: true, depthWrite: false })); s.scale.set(w, w / 4, 1); signs.push(s); return s;
   }
   TEAMS.forEach(g => {
     if (g.id === 'D') return;
@@ -899,103 +900,188 @@ function mount(container, opts) {
   }
 
   /* ================================================== AIRCRAFT */
+  /* ---------- livery decals (brand mark, wordmark, registration) ----------
+     opts.brand = { parts: [['SOLID', '#E07B24'], ['AIRE', '#6B3A1E']], ramp: ['#F4A53C', '#E07B24', '#9A5426', '#4A2A17'] }
+     Without a brand the aircraft stay plain white. */
+  const BRAND = opts.brand || null;
+  const decalCache = new Map();
+  function rampColor(t) {
+    const r = (BRAND && BRAND.ramp) || ['#c9ced6', '#9aa3ad', '#6e7781', '#4a525c'];
+    const f = t * (r.length - 1), i = Math.min(r.length - 2, Math.floor(f)), k = f - i;
+    const a = new T.Color(r[i]), b = new T.Color(r[i + 1]); return '#' + a.lerp(b, k).getHexString();
+  }
+  // a broken ring of tapered rays: light orange at the top, deep brown at the bottom, open on the leading side
+  function drawSunburst(x, cx, cy, r1, r2, n = 11, open = 'left') {
+    const start = open === 'left' ? -Math.PI * 0.62 : -Math.PI * 0.38, sweep = Math.PI * 1.55 * (open === 'left' ? 1 : -1);
+    for (let i = 0; i < n; i++) {
+      const t = i / (n - 1), a0 = start + sweep * (i / n), a1 = a0 + sweep / n * 0.6;
+      const ro = r2 * (0.86 + 0.14 * Math.sin(i * 2.3 + 0.7)), ri = r1 * (0.92 + 0.1 * Math.cos(i * 1.7));
+      x.fillStyle = rampColor(t); x.beginPath();
+      x.moveTo(cx + Math.cos(a0) * ri, cy + Math.sin(a0) * ri); x.lineTo(cx + Math.cos(a0) * ro, cy + Math.sin(a0) * ro);
+      x.lineTo(cx + Math.cos(a1) * ro, cy + Math.sin(a1) * ro); x.lineTo(cx + Math.cos(a1) * ri, cy + Math.sin(a1) * ri); x.closePath(); x.fill();
+    }
+  }
+  function decalTex(key, w, h, draw) {
+    if (decalCache.has(key)) return decalCache.get(key);
+    const c = document.createElement('canvas'); c.width = w; c.height = h; const x = c.getContext('2d'); draw(x, w, h);
+    const t = new T.CanvasTexture(c); if ('colorSpace' in t) t.colorSpace = T.SRGBColorSpace; t.anisotropy = Math.min(8, maxAniso);
+    decalCache.set(key, t); return t;
+  }
+  const BRAND_FONT = '"Avenir Next", "Montserrat", "Helvetica Neue", Arial, sans-serif';
+  const tailTex = (open) => decalTex('tail-' + open, 512, 512, (x, w, h) => drawSunburst(x, w / 2, h / 2, w * 0.2, w * 0.47, 11, open));
+  const wordTex = () => decalTex('word', 1024, 192, (x, w, h) => {
+    drawSunburst(x, 92, h / 2, 26, 64, 10, 'left');
+    x.font = `700 112px ${BRAND_FONT}`; x.textBaseline = 'middle'; let px = 182;
+    ((BRAND && BRAND.parts) || []).forEach(([t, c]) => { x.fillStyle = c; x.fillText(t, px, h / 2 + 6); px += x.measureText(t).width; });
+  });
+  const regTex = (txt) => decalTex('reg-' + txt, 512, 96, (x, w, h) => { x.font = `700 56px ${BRAND_FONT}`; x.fillStyle = '#2b2f36'; x.textBaseline = 'middle'; x.textAlign = 'center'; x.fillText(txt, w / 2, h / 2 + 3); });
+  function decal(tex, w, h) {
+    const m = new T.MeshStandardMaterial({ map: tex, transparent: true, roughness: 0.55, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4 });
+    const o = new T.Mesh(new T.PlaneGeometry(w, h), m); o.renderOrder = 3; return o;
+  }
+  // put a decal on both sides of the aircraft, facing outward
+  function sides(g, make, x, y, z) {
+    [-1, 1].forEach(sx => { const d = make(sx); d.position.set(sx * x, y, z); d.rotation.y = sx * Math.PI / 2; g.add(d); });
+  }
+
   /* One builder for every aircraft: lathe fuselage with an upswept tail,
-     extruded swept wings, nacelles, window rows, cheatline and fin livery. */
-  const winGeo = new T.BoxGeometry(0.16, 0.2, 0.16);
+     extruded wings (swept or straight, low or high), nacelles or propellers,
+     window rows, brand decals and registration. All white, as on the fleet sheet. */
+  const winGeo = new T.BoxGeometry(0.06, 0.2, 0.16);
   function wingGeom(rootC, tipC, span, sweep, thick, side) {
     const sh = new T.Shape(), sx = side;
     sh.moveTo(0, rootC * 0.45); sh.lineTo(sx * span, rootC * 0.45 - sweep); sh.lineTo(sx * span, rootC * 0.45 - sweep - tipC); sh.lineTo(0, -rootC * 0.55); sh.closePath();
     const g = new T.ExtrudeGeometry(sh, { depth: thick, bevelEnabled: true, bevelThickness: thick * 0.35, bevelSize: thick * 0.35, bevelSegments: 1 });
     g.rotateX(Math.PI / 2); g.translate(0, thick / 2, 0); return g;
   }
-  function nacelle(re, le, m, dark) {
+  function nacelle(re, le, m, dark, chevron) {
     const g = new T.Group();
-    const lg = new T.LatheGeometry([[re * 0.82, 0], [re, le * 0.12], [re * 0.98, le * 0.7], [re * 0.62, le]].map(([r, y]) => new T.Vector2(r, y)), 20);
-    // lathe axis y -> -z, shifted so the intake lip sits at z = le and faces forward
+    const prof = [[re * 0.84, 0], [re, le * 0.1], [re * 0.99, le * 0.62], [re * 0.8, le * 0.9], [re * 0.5, le]];
+    const lg = new T.LatheGeometry(prof.map(([r, y]) => new T.Vector2(r, y)), 22);
     const n = new T.Mesh(lg, m); n.rotation.x = -Math.PI / 2; n.position.z = le; n.castShadow = true; g.add(n);
-    const disc = new T.Mesh(new T.CircleGeometry(re * 0.8, 20), dark); disc.position.z = le - 0.06; g.add(disc);
-    const fan = new T.Mesh(new T.CircleGeometry(re * 0.3, 12), mat(0xb0b6bd)); fan.position.z = le - 0.04; g.add(fan);
+    const lip = new T.Mesh(new T.TorusGeometry(re * 0.86, re * 0.07, 6, 22), mat(0xc4c9cf, { metalness: 0.5, roughness: 0.35 })); lip.position.z = le; g.add(lip);
+    const disc = new T.Mesh(new T.CircleGeometry(re * 0.82, 20), dark); disc.position.z = le - 0.08; g.add(disc);
+    const fan = new T.Mesh(new T.ConeGeometry(re * 0.24, re * 0.4, 12), mat(0x9aa1a9, { metalness: 0.4 })); fan.rotation.x = Math.PI / 2; fan.position.z = le - 0.02; g.add(fan);
+    if (chevron) for (let i = 0; i < 12; i++) { const a = i / 12 * Math.PI * 2; const c = new T.Mesh(new T.ConeGeometry(re * 0.09, re * 0.22, 3), m); c.rotation.x = -Math.PI / 2; c.position.set(Math.cos(a) * re * 0.5, Math.sin(a) * re * 0.5, -re * 0.1); g.add(c); }
+    const core = new T.Mesh(new T.ConeGeometry(re * 0.32, re * 0.7, 14), mat(0x8d949c, { metalness: 0.5 })); core.rotation.x = -Math.PI / 2; core.position.z = -re * 0.3; g.add(core);
     g.position.z = -le / 2; const outer = new T.Group(); outer.add(g); return outer;
+  }
+  function propeller(rad, blades = 5) {
+    const g = new T.Group(), bm = mat(0x2a2e34, { roughness: 0.5 });
+    const sp = new T.Mesh(new T.ConeGeometry(rad * 0.16, rad * 0.4, 14), mat(0xf4f4f2)); sp.rotation.x = Math.PI / 2; g.add(sp);
+    for (let i = 0; i < blades; i++) { const b = new T.Mesh(new T.BoxGeometry(rad * 0.13, rad, 0.04), bm); b.geometry.translate(0, rad / 2, 0); b.rotation.z = i / blades * Math.PI * 2; b.rotation.y = 0.25; g.add(b); }
+    return g;
   }
   function airliner(o) {
     const g = new T.Group(); const L = o.len, R = o.r, Y = o.y;
-    const body = mat(o.body || 0xf7f7f5), dark = mat(0x1d2530, { roughness: 0.35, metalness: 0.2 }), acc = mat(o.livery), wingM = mat(o.wing || 0xe9ebee, { side: T.DoubleSide }), engM = mat(o.engine || o.livery);
+    const body = mat(0xf7f7f5, { roughness: 0.42 }), dark = mat(0x1b222b, { roughness: 0.3, metalness: 0.25 }), wingM = mat(0xdfe2e6, { side: T.DoubleSide, roughness: 0.5 }), engM = mat(o.engine || 0xf2f2f0, { roughness: 0.45 });
     // fuselage
-    const prof = [[0.01, 0], [R * 0.45, R * 0.14], [R * 0.75, R * 0.5], [R * 0.93, R * 1.05], [R, R * 1.8], [R, L - R * 3.4], [R * 0.9, L - R * 2.3], [R * 0.6, L - R * 1.1], [R * 0.26, L - 0.18], [0.02, L]];
-    const fg = new T.LatheGeometry(prof.map(([r, y]) => new T.Vector2(r, y)), 26);
-    const pa = fg.attributes.position;
-    for (let i = 0; i < pa.count; i++) { const y = pa.getY(i); const t0 = L - R * 3.6; if (y > t0) { const t = (y - t0) / (L - t0); pa.setZ(i, pa.getZ(i) + Math.pow(t, 1.6) * R * 0.62); } if (y < R * 1.2) pa.setZ(i, pa.getZ(i) - (1 - y / (R * 1.2)) * R * 0.12); }
+    const prof = [[0.01, 0], [R * 0.45, R * 0.14], [R * 0.76, R * 0.52], [R * 0.94, R * 1.08], [R, R * 1.85], [R, L - R * (o.tailLen || 3.4)], [R * 0.9, L - R * (o.tailLen || 3.4) * 0.66], [R * 0.6, L - R * (o.tailLen || 3.4) * 0.32], [R * 0.24, L - 0.16], [0.02, L]];
+    const fg = new T.LatheGeometry(prof.map(([r, y]) => new T.Vector2(r, y)), 28);
+    const pa = fg.attributes.position, t0 = L - R * (o.tailLen || 3.4) * 1.05;
+    for (let i = 0; i < pa.count; i++) {
+      const y = pa.getY(i);
+      if (y > t0) { const t = (y - t0) / (L - t0); pa.setZ(i, pa.getZ(i) + Math.pow(t, 1.6) * R * (o.upsweep || 0.62)); }
+      if (y < R * 1.3) pa.setZ(i, pa.getZ(i) - (1 - y / (R * 1.3)) * R * 0.14);
+      if (o.boxy) { pa.setX(i, pa.getX(i) * 1.04); }
+    }
     fg.computeVertexNormals();
     const fus = new T.Mesh(fg, body); fus.rotation.x = -Math.PI / 2; fus.position.set(0, Y, L / 2); fus.castShadow = true; fus.receiveShadow = true; g.add(fus);
     // cockpit glazing
-    const ck = new T.Mesh(new T.CylinderGeometry(R * 0.7, R * 0.84, R * 0.55, 18, 1, true, -1.1, 2.2), dark); ck.rotation.x = Math.PI / 2 - 0.55; ck.rotation.z = Math.PI; ck.position.set(0, Y + R * 0.42, L / 2 - R * 0.95); g.add(ck);
-    // cabin windows and cheatline
-    const nW = Math.floor((L - R * 6) / 0.62);
+    const ck = new T.Mesh(new T.CylinderGeometry(R * 0.72, R * 0.86, R * 0.5, 20, 1, true, -1.15, 2.3), dark); ck.rotation.x = Math.PI / 2 - 0.6; ck.rotation.z = Math.PI; ck.position.set(0, Y + R * 0.42, L / 2 - R * 0.98); g.add(ck);
+    // cabin windows
+    const ws = o.winScale || 1, pitch = (o.winPitch || 0.62);
+    const nW = Math.floor((L - R * 6.2) / pitch);
     const wins = new T.InstancedMesh(winGeo, dark, nW * 2); const o3 = new T.Object3D(); let wi = 0;
-    for (const sx of [-1, 1]) for (let i = 0; i < nW; i++) { o3.position.set(sx * R * 0.985, Y + R * 0.3, L / 2 - R * 2.4 - i * 0.62); o3.scale.set(1, 1, 1); o3.updateMatrix(); wins.setMatrixAt(wi++, o3.matrix); }
+    for (const sx of [-1, 1]) for (let i = 0; i < nW; i++) { o3.position.set(sx * R * 0.99, Y + R * 0.17, L / 2 - R * 2.5 - i * pitch); o3.scale.set(1, ws, ws); o3.updateMatrix(); wins.setMatrixAt(wi++, o3.matrix); }
     g.add(wins);
-    for (const sx of [-1, 1]) { const st = new T.Mesh(new T.BoxGeometry(0.05, R * 0.22, L - R * 4.2), acc); st.position.set(sx * R * 0.99, Y - R * 0.12, -R * 0.4); g.add(st); }
-    // door outlines (forward left)
-    const door = new T.Mesh(new T.BoxGeometry(0.05, R * 1.0, R * 0.55), mat(0xd8dbe0)); door.position.set(-R * 0.995, Y + R * 0.05, L / 2 - R * 2.2); g.add(door);
+    if (o.cheat) for (const sx of [-1, 1]) { const st = new T.Mesh(new T.BoxGeometry(0.04, R * 0.07, L - R * 5), mat(o.cheat)); st.position.set(sx * R * 0.995, Y - R * 0.08, -R * 0.3); g.add(st); }
+    // doors
+    const doorM = mat(0xd5d9de);
+    [L / 2 - R * 2.0, -L / 2 + R * 3.6].concat(o.midDoor ? [0] : []).forEach(z => { for (const sx of [-1, 1]) { const d = new T.Mesh(new T.BoxGeometry(0.03, R * 0.95, R * 0.52), doorM); d.position.set(sx * R * 0.998, Y + R * 0.08, z); g.add(d); } });
     // wings
-    const wz = o.wingZ ?? L * 0.06, wy = Y - R * 0.5;
+    const wz = o.wingZ ?? L * 0.06, wy = o.high ? Y + R * 0.92 : Y - R * 0.5;
+    if (o.high) g.add(box(R * 1.2, R * 0.3, o.rootC * 0.9, 0xf7f7f5, 0, Y + R * 0.88, wz - o.rootC * 0.05));
     for (const sx of [-1, 1]) {
-      const wg = new T.Group(); wg.position.set(sx * R * 0.55, wy, wz); wg.rotation.z = sx * (o.dihedral ?? 0.07);
+      const wg = new T.Group(); wg.position.set(sx * R * (o.high ? 0.3 : 0.55), wy, wz); wg.rotation.z = sx * (o.dihedral ?? 0.07);
       const w = new T.Mesh(wingGeom(o.rootC, o.tipC, o.span, o.sweep, o.thick || 0.22, sx), wingM); w.castShadow = true; w.receiveShadow = true; wg.add(w);
-      if (o.tips === 'winglet') { const wl = new T.Mesh(new T.BoxGeometry(0.08, R * 1.1, o.tipC * 0.9), acc); wl.position.set(sx * o.span, R * 0.5, o.rootC * 0.45 - o.sweep - o.tipC * 0.5); wl.rotation.x = -0.35; wg.add(wl); }
-      if (o.tips === 'raked') { const rk = new T.Mesh(wingGeom(o.tipC, 0.18, o.span * 0.12, o.tipC * 0.9, 0.12, sx), wingM); rk.position.set(sx * o.span, 0.02, o.rootC * 0.45 - o.sweep); wg.add(rk); }
-      const nav = glow(sx < 0 ? 0xff3b30 : 0x34c759, 1.8); nav.position.set(sx * (o.span + (o.tips === 'raked' ? o.span * 0.12 : 0.1)), 0.3, o.rootC * 0.45 - o.sweep - o.tipC * 0.5); wg.add(nav); (g.userData.navs = g.userData.navs || []).push(nav);
+      if (o.tips === 'winglet') { const wl = new T.Mesh(new T.BoxGeometry(0.07, R * 1.05, o.tipC * 0.85), body); wl.position.set(sx * o.span, R * 0.48, o.rootC * 0.45 - o.sweep - o.tipC * 0.5); wl.rotation.x = -0.4; wl.rotation.z = -sx * 0.12; wg.add(wl); }
+      if (o.tips === 'raked') { const rk = new T.Mesh(wingGeom(o.tipC, 0.16, o.span * 0.12, o.tipC * 0.9, 0.12, sx), wingM); rk.position.set(sx * o.span, 0.02, o.rootC * 0.45 - o.sweep); rk.rotation.z = sx * 0.08; wg.add(rk); }
+      const tipX = sx * (o.span + (o.tips === 'raked' ? o.span * 0.12 : 0.08));
+      const nav = glow(sx < 0 ? 0xff3b30 : 0x34c759, Math.max(1, R * 1.9)); nav.position.set(tipX, 0.3, o.rootC * 0.45 - o.sweep - o.tipC * 0.5); wg.add(nav); (g.userData.navs = g.userData.navs || []).push(nav);
       if (o.engines === 'wing') {
-        const n = nacelle(o.er, o.el, engM, dark); n.position.set(sx * o.span * 0.34, -o.er * 0.95, o.rootC * 0.45 - o.sweep * 0.34 + o.el * 0.35); wg.add(n);
-        const py = new T.Mesh(new T.BoxGeometry(0.16, o.er * 0.7, o.el * 0.7), wingM); py.position.set(sx * o.span * 0.34, -o.er * 0.3, o.rootC * 0.45 - o.sweep * 0.34 + o.el * 0.1); wg.add(py);
+        const n = nacelle(o.er, o.el, engM, dark, o.chevron); n.position.set(sx * o.span * 0.34, -o.er * 0.95, o.rootC * 0.45 - o.sweep * 0.34 + o.el * 0.35); wg.add(n);
+        const py = new T.Mesh(new T.BoxGeometry(0.14, o.er * 0.7, o.el * 0.7), wingM); py.position.set(sx * o.span * 0.34, -o.er * 0.3, o.rootC * 0.45 - o.sweep * 0.34 + o.el * 0.1); wg.add(py);
+      }
+      if (o.engines === 'prop') {
+        const ex = sx * o.span * 0.36, ez = o.rootC * 0.45 + o.el * 0.15;
+        const n = new T.Mesh(new T.CapsuleGeometry(o.er, o.el, 4, 12), engM); n.rotation.x = Math.PI / 2; n.position.set(ex, -o.er * 0.15, ez - o.el * 0.35); n.scale.set(1, 1, 1.15); wg.add(n);
+        const pr = propeller(o.prop || 0.45, 5); pr.position.set(ex, -o.er * 0.15, ez + o.el * 0.28 + o.er); wg.add(pr); (g.userData.props = g.userData.props || []).push(pr);
       }
       g.add(wg);
     }
     if (o.engines === 'rear') for (const sx of [-1, 1]) {
-      const n = nacelle(o.er, o.el, engM, dark); n.position.set(sx * (R + o.er * 1.15), Y + R * 0.35, -L / 2 + R * 3.3); g.add(n);
-      const py = new T.Mesh(new T.BoxGeometry(o.er * 1.2, 0.14, o.el * 0.5), body); py.position.set(sx * (R + o.er * 0.4), Y + R * 0.35, -L / 2 + R * 3.3); g.add(py);
+      const n = nacelle(o.er, o.el, engM, dark, false); n.position.set(sx * (R + o.er * 1.15), Y + R * 0.38, -L / 2 + R * 3.4); g.add(n);
+      const py = new T.Mesh(new T.BoxGeometry(o.er * 1.2, 0.12, o.el * 0.5), body); py.position.set(sx * (R + o.er * 0.4), Y + R * 0.38, -L / 2 + R * 3.4); g.add(py);
     }
-    // fin
-    const fh = o.finH, fc = o.finC, fsw = fh * 0.85;
-    const fs = new T.Shape(); fs.moveTo(0, 0); fs.lineTo(fc, 0); fs.lineTo(fc * 0.92 + fsw * 0.35, fh); fs.lineTo(fsw * 0.35 + fc * 0.92 - fc * 0.5, fh); fs.lineTo(fsw * 0.0 + fc * 0.12, fh * 0.3); fs.closePath();
-    const fgeo = new T.ExtrudeGeometry(fs, { depth: 0.18, bevelEnabled: true, bevelThickness: 0.05, bevelSize: 0.05, bevelSegments: 1 }); fgeo.rotateY(Math.PI / 2); fgeo.translate(-0.09, 0, 0);
-    const fin = new T.Mesh(fgeo, acc); fin.position.set(0, Y + R * 0.75, -L / 2 + fc + R * 0.4); fin.castShadow = true; g.add(fin);
-    const fstripe = new T.Mesh(new T.BoxGeometry(0.26, fh * 0.12, fc * 0.6), mat(0xffffff)); fstripe.position.set(0, Y + R * 0.75 + fh * 0.55, -L / 2 + fc * 0.5 + R * 0.4 - fsw * 0.2); g.add(fstripe);
+    // fin (white, the brand mark sits on it)
+    const fh = o.finH, fc = o.finC, fsw = fh * (o.finSweep ?? 0.85);
+    const fs = new T.Shape(); fs.moveTo(0, 0); fs.lineTo(fc, 0); fs.lineTo(fc * 0.92 + fsw * 0.35, fh); fs.lineTo(fsw * 0.35 + fc * 0.42, fh); fs.lineTo(fc * 0.12, fh * 0.3); fs.closePath();
+    const fgeo = new T.ExtrudeGeometry(fs, { depth: 0.16, bevelEnabled: true, bevelThickness: 0.05, bevelSize: 0.05, bevelSegments: 1 }); fgeo.rotateY(Math.PI / 2); fgeo.translate(-0.08, 0, 0);
+    const finZ = -L / 2 + fc + R * 0.4, finY = Y + R * 0.72;
+    const fin = new T.Mesh(fgeo, body); fin.position.set(0, finY, finZ); fin.castShadow = true; g.add(fin);
+    if (BRAND && o.logo !== false) {
+      const sz = Math.min(fh * 0.92, fc * 1.05);
+      [-1, 1].forEach(sx => { const d = decal(tailTex(sx < 0 ? 'right' : 'left'), sz, sz); d.position.set(sx * 0.17, finY + fh * 0.5, finZ - fc * 0.42 - fsw * 0.17); d.rotation.y = sx * Math.PI / 2; g.add(d); });
+    }
     // horizontal stabiliser (on the fin top for a T-tail)
-    const hy = o.ttail ? Y + R * 0.75 + fh - 0.05 : Y + R * 0.35, hz = o.ttail ? -L / 2 + R * 0.4 + fc * 0.5 - fsw * 0.32 : -L / 2 + R * 1.9;
-    for (const sx of [-1, 1]) { const hs = new T.Mesh(wingGeom(o.rootC * 0.42, o.tipC * 0.55, o.span * 0.34, o.sweep * 0.3, 0.12, sx), o.ttail ? acc : wingM); hs.position.set(sx * (o.ttail ? 0.05 : R * 0.3), hy, hz); hs.castShadow = true; g.add(hs); }
+    const hy = o.ttail ? finY + fh - 0.06 : Y + R * 0.3, hz = o.ttail ? finZ - fc * 0.5 - fsw * 0.3 : -L / 2 + R * 1.9;
+    for (const sx of [-1, 1]) { const hs = new T.Mesh(wingGeom(o.rootC * (o.hsC || 0.42), o.tipC * 0.55, o.span * (o.hsSpan || 0.34), o.sweep * 0.3, 0.1, sx), o.ttail ? body : wingM); hs.position.set(sx * (o.ttail ? 0.05 : R * 0.3), hy, hz); hs.castShadow = true; g.add(hs); }
+    // wordmark and registration
+    if (BRAND && o.word !== false) { const ww = Math.min(L * 0.2, R * 2.7), wh = ww * 192 / 1024; sides(g, () => decal(wordTex(), ww, wh), R * 0.85, Y + R * 0.57, L / 2 - R * 2.3 - ww * 0.5); }
+    if (o.reg) { const rw = R * 2.0, rh = rw * 96 / 512; sides(g, () => decal(regTex(o.reg), rw, rh), R * (o.engines === 'rear' ? 1.0 : 0.93), Y + R * (o.engines === 'rear' ? 0.05 : 0.48), -L / 2 + R * (o.engines === 'rear' ? 4.4 : 5.2)); }
     // gear
     const gear = new T.Group(); g.add(gear);
-    const tyre = mat(0x1f2328);
-    [[0, L / 2 - R * 2.6, 1], [-R * 1.05, wz - 0.4, 2], [R * 1.05, wz - 0.4, 2]].forEach(([x, z, n]) => {
-      gear.add(cyl(0.07, 0.07, Y - R * 0.6, mat(0xc8ccd2), x, (Y - R * 0.6) / 2 + 0.25, z, 6));
-      for (let k = 0; k < n; k++) { const w = cyl(0.3, 0.3, 0.24, tyre, x + (n > 1 ? (k - 0.5) * 0.3 : 0), 0.3, z, 12); w.rotation.z = Math.PI / 2; gear.add(w); }
+    const tyre = mat(0x1f2328), strut = mat(0xc8ccd2, { metalness: 0.5, roughness: 0.4 });
+    const mainY = o.high ? R * 0.2 : Y - R * 0.6;
+    [[0, L / 2 - R * 2.6, 1, 0.24], [-R * (o.high ? 1.15 : 1.05), wz - (o.high ? -0.1 : 0.4), o.mainWheels || 2, 0.3], [R * (o.high ? 1.15 : 1.05), wz - (o.high ? -0.1 : 0.4), o.mainWheels || 2, 0.3]].forEach(([x, z, n, wr], idx) => {
+      const top = idx === 0 ? Y - R * 0.6 : mainY + 0.25; const wrr = wr * (o.wheel || 1);
+      gear.add(cyl(0.06, 0.06, Math.max(0.1, top - wrr), strut, x, (top - wrr) / 2 + wrr, z, 6));
+      for (let k = 0; k < n; k++) { const w = cyl(wrr, wrr, 0.22, tyre, x + (n > 1 ? (k - (n - 1) / 2) * 0.28 : 0), wrr, z, 12); w.rotation.z = Math.PI / 2; gear.add(w); }
     });
+    if (o.high) for (const sx of [-1, 1]) { const sp = new T.Mesh(new T.CapsuleGeometry(R * 0.32, o.rootC * 0.8, 4, 10), body); sp.rotation.x = Math.PI / 2; sp.position.set(sx * R * 0.95, Y - R * 0.55, wz); g.add(sp); }
     // lights
     const strobe = glow(0xffffff, 3, 0); strobe.position.set(0, Y + R + 0.2, 0); g.add(strobe);
     const land = glow(0xfff6dd, 5, 0); land.position.set(0, Y - R * 0.2, L / 2 + 0.6); g.add(land);
     const beacon = glow(0xff3b30, 1.5, 0); beacon.position.set(0, Y + R + 0.05, -L * 0.1); g.add(beacon);
-    g.traverse(c => { if (c.isMesh) { c.castShadow = true; } });
+    g.traverse(c => { if (c.isMesh && !c.material.transparent) c.castShadow = true; });
     return { g, gear, navs: g.userData.navs, strobe, land, beacon };
   }
-  function makeJet(liveryHex) {
-    return airliner({ len: 12.6, r: 0.88, y: 1.95, livery: liveryHex, engine: 0xdfe3e8, span: 6.1, rootC: 2.6, tipC: 0.75, sweep: 2.3, thick: 0.2, tips: 'winglet', engines: 'wing', er: 0.5, el: 1.9, finH: 2.9, finC: 2.6 });
+  /* Sizes keep real proportions at 0.335 units per metre:
+     A320-class work flights 37.6 m, 787-8 56.7 m, Global 8000 33.8 m, Do 228 NXT 16.6 m. */
+  function makeJet(typeHex, reg) {
+    return airliner({ len: 12.6, r: 0.88, y: 1.95, cheat: typeHex, engine: 0xf2f2f0, span: 5.4, rootC: 2.5, tipC: 0.72, sweep: 2.1, thick: 0.2, tips: 'winglet', engines: 'wing', er: 0.5, el: 1.9, finH: 2.9, finC: 2.5, reg });
   }
-  function makeB787() {   // the owner's 787-8: longer, raked wingtips, big engines, navy livery
-    return airliner({ len: 19, r: 1.25, y: 2.7, livery: 0x1d3557, engine: 0xe3e6ea, span: 9.2, rootC: 3.8, tipC: 0.9, sweep: 3.6, thick: 0.26, tips: 'raked', engines: 'wing', er: 0.82, el: 3.0, finH: 4.4, finC: 3.8, dihedral: 0.09 }).g;
+  function makeB787(reg) {
+    return airliner({ len: 19, r: 1.2, y: 2.6, engine: 0xf2f2f0, span: 8.4, rootC: 3.7, tipC: 0.85, sweep: 3.7, thick: 0.24, tips: 'raked', engines: 'wing', er: 0.82, el: 3.1, chevron: true, finH: 4.6, finC: 3.9, dihedral: 0.1, reg, midDoor: true, winScale: 0.9, winPitch: 0.5, mainWheels: 4 }).g;
   }
-  function makeGlobal() {  // the owner's Global 8000: T-tail, rear engines, winglets, gold cheatline
-    return airliner({ len: 11.6, r: 0.78, y: 1.75, livery: 0xa07c3f, engine: 0xf2f2f0, span: 6.6, rootC: 2.4, tipC: 0.6, sweep: 2.6, thick: 0.16, tips: 'winglet', engines: 'rear', er: 0.5, el: 2.1, finH: 2.9, finC: 2.4, ttail: true, wingZ: 0.2, dihedral: 0.05 }).g;
+  function makeGlobal(reg) {
+    return airliner({ len: 11.3, r: 0.76, y: 1.7, engine: 0xf4f4f2, span: 4.55, rootC: 2.2, tipC: 0.55, sweep: 2.3, thick: 0.14, tips: 'winglet', engines: 'rear', er: 0.46, el: 2.0, finH: 2.6, finC: 2.2, ttail: true, hsSpan: 0.42, wingZ: 0.25, dihedral: 0.05, reg, logo: false, word: false, winScale: 1.45, winPitch: 0.74, tailLen: 4.2 }).g;
+  }
+  function makeDo228(reg) {
+    return airliner({ len: 5.55, r: 0.42, y: 0.88, engine: 0xf4f4f2, span: 2.55, rootC: 0.68, tipC: 0.52, sweep: 0.06, thick: 0.08, tips: 'none', engines: 'prop', er: 0.16, el: 0.8, prop: 0.45, finH: 1.35, finC: 1.0, finSweep: 0.75, high: true, dihedral: 0, wingZ: 0.35, reg, winPitch: 0.42, tailLen: 3.2, upsweep: 0.9, hsSpan: 0.55, hsC: 0.9, mainWheels: 1, wheel: 0.8, boxy: true, winScale: 0.62 }).g;
   }
   const fleetObjs = [];
-  const FLEET = (opts.fleet && opts.fleet.length ? opts.fleet : [{ reg: 'B787-8', type: 'b787' }, { reg: 'Global 8000', type: 'global' }]).slice(0, 2);
-  FLEET.forEach((f, i) => {
-    const g = f.type === 'global' ? makeGlobal() : makeB787();
-    const x = i === 0 ? -100 : -124, z = f.type === 'global' ? -27 : -28;
-    g.position.set(x, 0, z); g.rotation.y = 0;
-    g.traverse(c => { if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; } });
+  const FLEET = (opts.fleet && opts.fleet.length ? opts.fleet : [{ reg: '787-8', type: 'b787', label: 'Boeing 787-8' }, { reg: 'G8000', type: 'global', label: 'Bombardier Global 8000' }, { reg: '228NXT', type: 'do228', label: 'Dornier 228 NXT' }]).slice(0, 3);
+  const FLEET_SPOT = { b787: [-100, -28], global: [-124, -26], do228: [-82, -31] };
+  FLEET.forEach((f) => {
+    const make = { b787: makeB787, global: makeGlobal, do228: makeDo228 }[f.type] || makeB787;
+    const g = make(f.reg);
+    const [x, z] = FLEET_SPOT[f.type] || [-100, -28];
+    g.position.set(x, 0, z);
+    g.traverse(c => { if (c.isMesh && !c.material.transparent) { c.castShadow = true; c.receiveShadow = true; } });
     world.add(g);
-    const tag = signSprite('✈', f.reg, '#64d2ff', 8.5); tag.position.set(x, f.type === 'global' ? 9 : 11, z - 2); world.add(tag);
+    const tag = signSprite('✈', f.reg, '#E07B24', f.type === 'do228' ? 6 : 8); tag.position.set(x, f.type === 'b787' ? 11 : f.type === 'global' ? 8 : 5, z - 2); world.add(tag);
     pickable(g, { kind: 'fleet', id: f.reg });
     fleetObjs.push({ f, g });
   });
@@ -1009,7 +1095,7 @@ function mount(container, opts) {
     else if (kind === 'cater') {
       g.add(box(1.8, 1.1, 1.6, 0xffffff, 0, 0.9, 2.0)); g.add(box(1.7, 0.5, 1.0, dark, 0, 1.6, 2.3)); g.add(box(1.8, 0.4, 3.8, 0x9aa3ad, 0, 0.6, -0.7));
       parts.box = box(1.9, 1.6, 3.4, 0xffffff, 0, 1.6, -0.7); g.add(parts.box);
-      parts.stripe = box(1.92, 0.25, 3.42, 0xff9f0a, 0, 1.6, -0.7); g.add(parts.stripe);
+      parts.stripe = box(1.92, 0.25, 3.42, 0xd9782d, 0, 1.6, -0.7); g.add(parts.stripe);
     } else if (kind === 'van') {
       g.add(box(2.0, 1.8, 4.2, 0xffffff, 0, 1.2, 0)); g.add(box(2.02, 0.35, 4.22, 0x0a84ff, 0, 1.0, 0)); g.add(box(1.9, 0.7, 0.1, dark, 0, 1.6, 2.1));
       parts.beacon = glow(0x64d2ff, 1.8); parts.beacon.position.set(0, 2.4, 0); g.add(parts.beacon);
@@ -1090,7 +1176,7 @@ function mount(container, opts) {
   }
 
   function makeAircraft(item) {
-    const j = makeJet(P.livery[item.type] || 0xff9f0a);
+    const j = makeJet(P.livery[item.type] || 0xd9782d, item.id);
     const pool = new T.Mesh(new T.PlaneGeometry(9, 16), new T.MeshBasicMaterial({ map: GLOW, color: 0xfff1d0, transparent: true, opacity: 0, depthWrite: false, blending: T.AdditiveBlending }));
     pool.rotation.x = -Math.PI / 2; pool.position.set(0, 0.25, 13); j.g.add(pool); j.pool = pool;
     world.add(j.g); j.g.visible = false;
@@ -1455,7 +1541,7 @@ function mount(container, opts) {
   function hideTip() { UI && UI.tip(null); }
 
   /* ---------- selection ---------- */
-  const selRing = mesh(new T.RingGeometry(1, 1.22, 48), new T.MeshBasicMaterial({ color: 0xff9f0a, transparent: true, opacity: 0.9, depthWrite: false, side: T.DoubleSide }), 0, 0.3, 0, false, false);
+  const selRing = mesh(new T.RingGeometry(1, 1.22, 48), new T.MeshBasicMaterial({ color: 0xe07b24, transparent: true, opacity: 0.9, depthWrite: false, side: T.DoubleSide }), 0, 0.3, 0, false, false);
   selRing.rotation.x = -Math.PI / 2; selRing.visible = false; scene.add(selRing);
   let SEL = null;
   function objFor(info) {
@@ -1571,6 +1657,7 @@ function mount(container, opts) {
       const o = objFor(SEL); if (o) { o.getWorldPosition(_np); selRing.position.set(_np.x, Math.max(0.3, _np.y + 0.25), _np.z); selRing.material.opacity = 0.55 + Math.sin(tt * 5) * 0.35; } else selRing.visible = false;
     }
     tourTick(rawDt);
+    signs.forEach(sg => { sg.getWorldPosition(_np); const d = _np.distanceTo(camera.position); sg.material.opacity = clamp((d - 38) / 30, 0, 1); sg.visible = sg.material.opacity > 0.02; });
     boardClock -= rawDt; if (boardClock <= 0) { boardClock = 30; updateBoards(); }
     updateCam(rawDt);
     renderer.render(scene, camera);
@@ -1886,10 +1973,10 @@ function mount(container, opts) {
 function injectCss() {
   if (cssInjected) return; cssInjected = true;
   const css = `
-.oa{--oa-fg:#1d1d1f;--oa-fg2:#6e6e73;--oa-line:rgba(60,60,67,.14);--oa-glass:rgba(255,255,255,.72);--oa-glass-strong:rgba(255,255,255,.9);--oa-accent:#ff9500;--oa-blue:#007aff;--oa-green:#34c759;--oa-orange:#ff9500;--oa-red:#ff3b30;--oa-grey:#8e8e93;--oa-shadow:0 8px 28px rgba(0,0,0,.10),0 1px 2px rgba(0,0,0,.06);
+.oa{--oa-fg:#1d1d1f;--oa-fg2:#6e6e73;--oa-line:rgba(60,60,67,.14);--oa-glass:rgba(255,255,255,.72);--oa-glass-strong:rgba(255,255,255,.9);--oa-accent:#e07b24;--oa-blue:#007aff;--oa-green:#34c759;--oa-orange:#ff9500;--oa-red:#ff3b30;--oa-grey:#8e8e93;--oa-shadow:0 8px 28px rgba(0,0,0,.10),0 1px 2px rgba(0,0,0,.06);
   position:relative;width:100%;height:100%;min-height:420px;overflow:hidden;border-radius:inherit;color:var(--oa-fg);background:#dfe8ee;
   font:13px/1.35 -apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",Arial,sans-serif;-webkit-font-smoothing:antialiased;outline:none;isolation:isolate}
-.oa[data-oa-theme=dark]{--oa-fg:#f5f5f7;--oa-fg2:#a1a1a6;--oa-line:rgba(255,255,255,.12);--oa-glass:rgba(28,28,30,.66);--oa-glass-strong:rgba(44,44,46,.92);--oa-accent:#ff9f0a;--oa-blue:#0a84ff;--oa-green:#30d158;--oa-orange:#ff9f0a;--oa-red:#ff453a;--oa-shadow:0 10px 30px rgba(0,0,0,.4);background:#101a2b}
+.oa[data-oa-theme=dark]{--oa-fg:#f5f5f7;--oa-fg2:#a1a1a6;--oa-line:rgba(255,255,255,.12);--oa-glass:rgba(28,28,30,.66);--oa-glass-strong:rgba(44,44,46,.92);--oa-accent:#ef8a3a;--oa-blue:#0a84ff;--oa-green:#30d158;--oa-orange:#ff9f0a;--oa-red:#ff453a;--oa-shadow:0 10px 30px rgba(0,0,0,.4);background:#101a2b}
 .oa:focus-visible{box-shadow:inset 0 0 0 2px var(--oa-blue)}
 .oa *{box-sizing:border-box}
 .oa [hidden]{display:none!important}

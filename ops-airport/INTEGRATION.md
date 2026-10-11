@@ -38,9 +38,11 @@ const room = OpsAirport.mount(cardEl, {
   lang: App.lang === 'es' ? 'es' : 'en',
   theme: document.documentElement.classList.contains('dark') ? 'dark' : 'light',
   tz: 'Europe/Madrid',
+  brand: { parts: [['SOLID', '#E07B24'], ['AIRE', '#6B3A1E']], ramp: ['#F4A53C', '#E07B24', '#9A5426', '#4A2A17'] },
   fleet: [
-    { reg: 'REG-1', type: 'b787', label: 'Boeing 787-8' },
-    { reg: 'REG-2', type: 'global', label: 'Global 8000' }
+    { reg: 'P4-787', type: 'b787', label: 'Boeing 787-8' },
+    { reg: 'P4-8000', type: 'global', label: 'Bombardier Global 8000' },
+    { reg: 'DO228NXT', type: 'do228', label: 'Dornier 228 NXT' }
   ],
   onOpen: (link) => { if (link) location.hash = link; }
 });
@@ -54,7 +56,18 @@ room.unmount();
 4. Keep the v2 SVG view as the fallback when WebGL is missing (`OpsAirport.mount` throws if `THREE` is absent, and three.js throws if WebGL is off).
 5. Give the card a height, for example `height: min(78vh, 820px)` on desktop and `calc(100dvh - header)` on phones. The overlay switches to a phone layout under 820 px wide, with bottom sheets for details and lists.
 
-Fleet entries can carry extra rows for the detail card, for example `notes: [['Next check', 'Feb 2027']]`.
+Fleet entries can carry extra rows for the detail card, for example `notes: [['Next check', 'Feb 2027']]`. Fleet types: `b787`, `global`, `do228`, drawn at their real relative lengths (56.7 m, 33.8 m, 16.6 m).
+
+Livery: pass `brand` and every aircraft is painted like the fleet sheet, white with the sunburst on the tail and the wordmark forward. The Global stays plain, as on the sheet. Work flights carry their flight number as the registration and a thin cheatline in the item's colour.
+
+```js
+brand: { parts: [['SOLID', '#E07B24'], ['AIRE', '#6B3A1E']], ramp: ['#F4A53C', '#E07B24', '#9A5426', '#4A2A17'] },
+fleet: [
+  { reg: 'P4-787', type: 'b787', label: 'Boeing 787-8' },
+  { reg: 'P4-8000', type: 'global', label: 'Bombardier Global 8000' },
+  { reg: 'DO228NXT', type: 'do228', label: 'Dornier 228 NXT' }
+]
+```
 
 ## Cost and performance
 
