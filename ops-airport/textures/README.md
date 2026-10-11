@@ -3,7 +3,7 @@
 | Files | Source | Licence |
 |---|---|---|
 | `rw_*.jpg` (runway tiles: threshold, 0/9 and 2/7 designators, touchdown zones, aiming point, centreline) | FlightGear `fgdata/Textures/Runway` (`pa_*.png`) | GPL v2 or later |
-| `taxiway.jpg`, `shoulder.jpg` | FlightGear `fgdata/Textures/Runway` | GPL v2 or later |
+| `taxiway.jpg`, `shoulder.jpg`, `apron.jpg` (cut from the taxiway tile) | FlightGear `fgdata/Textures/Runway` | GPL v2 or later |
 | `grass.jpg`, `asphalt.jpg`, `carpark.jpg` | FlightGear `fgdata/Textures/Terrain` | GPL v2 or later (see fgdata `Textures/Credits`) |
 | `trees.webp` (cypress, holm oak, olive, oak, shrubs) | FlightGear `fgdata/Textures/Trees` (mediterranean-evergreen, -deciduous, -shrub) | GPL v2 or later |
 | `foam.jpg` | FlightGear `fgdata/Textures/Water` | GPL v2 or later |

@@ -238,7 +238,7 @@ function mount(container, opts) {
   sun.castShadow = true;
   sun.shadow.mapSize.set(isPhone ? 1024 : 4096, isPhone ? 1024 : 4096);
   const sc = sun.shadow.camera; sc.left = -200; sc.right = 200; sc.top = 150; sc.bottom = -150; sc.near = 10; sc.far = 800;
-  sun.shadow.bias = -0.0006; sun.shadow.normalBias = 0.6;
+  sun.shadow.bias = -0.00025; sun.shadow.normalBias = 0.06;
   scene.add(sun); scene.add(sun.target);
   const flash = new T.AmbientLight(0xc8d6ff, 0); scene.add(flash);
   // image-based lighting: a small gradient sky rendered into a PMREM so paint, glass and metal reflect the sky
@@ -479,9 +479,10 @@ function mount(container, opts) {
           diffuseColor.rgb = mix(diffuseColor.rgb, vec3(lum) * vec3(1.18, 1.08, 0.78), 0.55);
           diffuseColor.rgb *= mix(dry, lush, smoothstep(0.3, 0.9, n)) * (0.92 + 0.16 * vn(vWP.xz / 5.0)) * 1.12;`);
     };
-    surface(TEX.concrete, 196, 40, 0, 0.06, -26, 40);                      // main apron
-    surface(TEX.concrete, 48, 54, HANGAR.x, 0.07, -24, 40);                 // hangar apron
-    surface(TEX.concrete, 58, 34, -105, 0.07, -27, 40);                     // fleet apron
+    // aprons: asphalt (FlightGear taxiway asphalt without the centreline)
+    [[196, 40, 0, 0.06, -26], [48, 54, HANGAR.x, 0.07, -24], [58, 34, -105, 0.07, -27]].forEach(([w, d, x, y, z]) => {
+      const m = surface(TEX.taxi, w, d, x, y, z, 32, 8); m.material.color.setHex(0x9c9a95); usePhoto(m.material, 'apron.jpg', w / 9, d / 9);
+    });
     // taxiways: FlightGear asphalt tile with its yellow centreline running along the taxiway
     [[256, 8, -6, 0.09, TWY_Z, 0], [22, 9, -122, 0.1, (RWY_Z + TWY_Z) / 2, Math.PI / 2], [22, 9, 96, 0.1, (RWY_Z + TWY_Z) / 2, Math.PI / 2]].forEach(([w, d, x, y, z, r]) => {
       const m = surface(TEX.taxi, w, d, x, y, z, 32, d, r); usePhoto(m.material, 'taxiway.jpg', d / 8, w / 8, t => { t.center.set(0.5, 0.5); t.rotation = Math.PI / 2; });
@@ -1513,11 +1514,22 @@ function mount(container, opts) {
     return MODELS[name];
   }
   // replace a drawn stand-in with the real model, keeping the group (and its picking) in place
+  // soft contact shadow under an aircraft, sized from its model footprint
+  let contactTex = null;
+  function contactShadow(group, box) {
+    if (!contactTex) { const c = document.createElement('canvas'); c.width = c.height = 128; const x = c.getContext('2d'); const g = x.createRadialGradient(64, 64, 4, 64, 64, 64); g.addColorStop(0, 'rgba(0,0,0,0.75)'); g.addColorStop(0.55, 'rgba(0,0,0,0.35)'); g.addColorStop(1, 'rgba(0,0,0,0)'); x.fillStyle = g; x.fillRect(0, 0, 128, 128); contactTex = new T.CanvasTexture(c); }
+    const sx = box.max.x - box.min.x, sz = box.max.z - box.min.z;
+    const mk = (w, d, x, z, o) => { const m = new T.Mesh(new T.PlaneGeometry(w, d), new T.MeshBasicMaterial({ map: contactTex, transparent: true, opacity: o, depthWrite: false, color: 0x000000 })); m.rotation.x = -Math.PI / 2; m.position.set(x, 0.16, z); m.renderOrder = 1; group.add(m); return m; };
+    const list = [mk(sx * 0.32, sz * 1.02, 0, (box.min.z + box.max.z) / 2, 0.55), mk(sx * 1.0, sz * 0.32, 0, (box.min.z + box.max.z) / 2 - sz * 0.05, 0.35)];
+    group.userData.contact = list; return list;
+  }
   function swapIn(group, name, keep = []) {
     return model(name).then(m => {
       if (!alive.on) return null;
       [...group.children].forEach(c => { if (!keep.includes(c)) group.remove(c); });
-      const inst = m.clone(true); group.add(inst); group.userData.real = inst; return inst;
+      const inst = m.clone(true); group.add(inst); group.userData.real = inst;
+      if (/^(b787|a320|global|do228)$/.test(name)) contactShadow(group, m.userData.box);
+      return inst;
     }).catch(() => null);
   }
   const fleetObjs = [];
@@ -2013,6 +2025,7 @@ function mount(container, opts) {
     }
     const gk = ac.gearK === undefined ? 1 : ac.gearK; ac.gearS = lerp(ac.gearS === undefined ? 1 : ac.gearS, gk, 1 - Math.exp(-dt * 3));
     ac.gear.scale.y = Math.max(0.01, ac.gearS); ac.gear.visible = ac.gearS > 0.05;
+    if (ac.g.userData.contact) { const k = clamp(1 - ac.g.position.y / 6, 0, 1); ac.g.userData.contact.forEach((m, i) => m.material.opacity = (i ? 0.35 : 0.55) * k); }
     if (ac.gearMeshes) { const gv = ac.gearS > 0.5; if (ac.gearMeshes[0] && ac.gearMeshes[0].visible !== gv) ac.gearMeshes.forEach(m => m.visible = gv); }
     const airborne = ['approach', 'climb', 'takeoff', 'roll'].includes(ac.state);
     ac.strobe.material.opacity = airborne ? ((SIM.t * 1.3) % 1 < 0.08 ? 1 : 0) : 0;
