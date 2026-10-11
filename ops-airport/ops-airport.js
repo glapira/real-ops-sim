@@ -651,26 +651,128 @@ function mount(container, opts) {
       [m.map, m.emissiveMap].forEach(t => { t.needsUpdate = true; t.repeat.set(repX, repY); }); windowMats.push(m); return m; };
   })();
 
-  /* ---------- terminal wings (cut-away roof) ---------- */
-  const windowMats = [];
+  /* ---------- terminal: two glazed wings under one curved standing-seam roof ----------
+     The roof leans up from the airside eave to a crest and down to a long landside canopy over the kerb.
+     It fades out when you look down into the gates, so the teams stay visible. */
+  const windowMats = [], roofMats = [], soffitMats = [];
+  const ROOF = { z0: -7.4, z1: 20.4, yA: 5.6, yL: 6.6, rise: 1.5, th: 0.34 };
+  function roofY(x, z) {
+    const u = clamp((z - ROOF.z0) / (ROOF.z1 - ROOF.z0), 0, 1);
+    return ROOF.yA + (ROOF.yL - ROOF.yA) * u + Math.sin(Math.PI * u) * (ROOF.rise + 0.26 * Math.sin(x * Math.PI / 12));
+  }
+  const roofTex = (() => {
+    const seams = canvasTex(512, 256, (x, w, h) => {
+      x.fillStyle = '#c3c7cb'; x.fillRect(0, 0, w, h);
+      for (let i = 0; i < 16; i++) { const g = x.createLinearGradient(i * 32, 0, i * 32 + 32, 0); g.addColorStop(0, '#b5babf'); g.addColorStop(0.5, '#cfd3d6'); g.addColorStop(1, '#bcc1c5'); x.fillStyle = g; x.fillRect(i * 32, 0, 32, h); x.fillStyle = '#e6e9eb'; x.fillRect(i * 32, 0, 2, h); x.fillStyle = '#8e9398'; x.fillRect(i * 32 + 2, 0, 1.5, h); }
+      speckle(x, w, h, 2500, ['#9aa0a5', '#e1e4e6'], 0.12, 1.5);
+    });
+    const wood = canvasTex(512, 256, (x, w, h) => {
+      const rnd = seeded(11);
+      for (let i = 0; i < 64; i++) { const t = rnd(); x.fillStyle = `rgb(${190 + t * 30 | 0},${140 + t * 26 | 0},${92 + t * 20 | 0})`; x.fillRect(i * 8, 0, 6, h); x.fillStyle = '#3a2a1c'; x.fillRect(i * 8 + 6, 0, 2, h); }
+      speckle(x, w, h, 3000, ['#8a5f3a', '#e0b88a'], 0.1, 2);
+    });
+    return { seams, wood };
+  })();
+  // a patch of roof surface over [x0,x1] x [z0,z1], lifted by dy; up = true faces the sky
+  function roofSurface(x0, x1, z0, z1, dy, up, uvx = 4, uvz = 6) {
+    const nx = Math.max(2, Math.ceil((x1 - x0) / 1.5)), nz = Math.max(2, Math.ceil((z1 - z0) / 1.2));
+    const pos = [], uv = [], idx = [];
+    for (let i = 0; i <= nx; i++) for (let j = 0; j <= nz; j++) {
+      const x = lerp(x0, x1, i / nx), z = lerp(z0, z1, j / nz);
+      pos.push(x, roofY(x, z) + dy, z); uv.push(x / uvx, z / uvz);
+    }
+    for (let i = 0; i < nx; i++) for (let j = 0; j < nz; j++) {
+      const a = i * (nz + 1) + j, b = a + nz + 1, c = a + 1, d = b + 1;
+      if (up) idx.push(a, c, b, b, c, d); else idx.push(a, b, c, b, d, c);
+    }
+    const g = new T.BufferGeometry(); g.setAttribute('position', new T.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new T.Float32BufferAttribute(uv, 2)); g.setIndex(idx); g.computeVertexNormals(); return g;
+  }
+  // the fascia: a band between the top and the underside, all round the edge
+  function roofEdge(x0, x1) {
+    const pts = [], n = 40;
+    for (let i = 0; i <= n; i++) pts.push([lerp(x0, x1, i / n), ROOF.z0]);
+    for (let j = 1; j <= 20; j++) pts.push([x1, lerp(ROOF.z0, ROOF.z1, j / 20)]);
+    for (let i = 1; i <= n; i++) pts.push([lerp(x1, x0, i / n), ROOF.z1]);
+    for (let j = 1; j <= 20; j++) pts.push([x0, lerp(ROOF.z1, ROOF.z0, j / 20)]);
+    const pos = [], idx = [];
+    pts.forEach(([x, z], i) => { const y = roofY(x, z); pos.push(x, y + 0.02, z, x, y - ROOF.th - 0.06, z); if (i) { const a = (i - 1) * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); } });
+    const g = new T.BufferGeometry(); g.setAttribute('position', new T.Float32BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals(); return g;
+  }
+  const roofTopM = new T.MeshStandardMaterial({ map: roofTex.seams, roughness: 0.38, metalness: 0.6, envMapIntensity: 1.1 });
+  const soffitM = new T.MeshStandardMaterial({ map: roofTex.wood, roughness: 0.7, emissive: 0xffc58a, emissiveMap: roofTex.wood, emissiveIntensity: 0 });
+  const fasciaM = new T.MeshStandardMaterial({ color: 0xeef0f1, roughness: 0.3, metalness: 0.5, side: T.DoubleSide });
+  const skyM = new T.MeshPhysicalMaterial({ color: 0x1f3442, roughness: 0.06, metalness: 0.4, clearcoat: 1, emissive: 0x3a2a1a, emissiveIntensity: 0 });
+  roofMats.push(roofTopM, soffitM, fasciaM, skyM); soffitMats.push(soffitM); windowMats.push(skyM);
+  const roofG = new T.Group(); world.add(roofG);
+  [[-76, -8.6], [8.6, 76]].forEach(([x0, x1]) => {
+    const top = new T.Mesh(roofSurface(x0, x1, ROOF.z0, ROOF.z1, 0, true), roofTopM); top.castShadow = true; top.receiveShadow = true; roofG.add(top);
+    const und = new T.Mesh(roofSurface(x0, x1, ROOF.z0, ROOF.z1, -ROOF.th, false, 4, 6), soffitM); und.receiveShadow = true; roofG.add(und);
+    roofG.add(new T.Mesh(roofEdge(x0, x1), fasciaM));
+    // two skylight bands running the length of the wing
+    [[0.6, 2.2], [8.2, 9.8]].forEach(([z0, z1]) => { const sk = new T.Mesh(roofSurface(x0 + 2, x1 - 2, z0, z1, 0.05, true), skyM); roofG.add(sk); });
+  });
+  // slim tapered columns with a forked head under both overhangs
+  {
+    const colM = mat(0xd9dcdf, { roughness: 0.35, metalness: 0.6 });
+    const shaft = new T.CylinderGeometry(0.16, 0.24, 1, 12), arm = new T.CylinderGeometry(0.07, 0.1, 1, 8);
+    const cols = []; roofMats.push(colM);
+    [-70, -58, -46, -34, -22, -10, 10, 22, 34, 46, 58, 70].forEach(x => cols.push([x, -6.6], [x, 19.4]));
+    cols.forEach(([x, z]) => {
+      const top = roofY(x, z) - ROOF.th, h = top - 1.6;
+      const s = new T.Mesh(shaft, colM); s.scale.y = h; s.position.set(x, h / 2, z); s.castShadow = true; roofG.add(s);
+      [-1, 1].forEach(sd => { const a = new T.Mesh(arm, colM); a.scale.y = 2.0; a.position.set(x + sd * 0.55, h + 0.75, z); a.rotation.z = -sd * 0.62; a.castShadow = true; roofG.add(a); });
+    });
+  }
+  // downlights under the landside canopy and the airside overhang
+  for (let x = -70; x <= 70; x += 6) { if (Math.abs(x) < 10) continue; lightPool(5.5, 5.5, 0xffd9a0, x, 17.4, 0.24); lightPool(4, 4, 0xffd9a0, x + 3, -5.6, 0.2); }
+  // fade the roof when looking down into the terminal
+  let roofK = 1;
+  function updateRoof(dt) {
+    const t = CAM.target, near = CAM.dist < (isPhone ? 240 : 170) && CAM.pol < 1.22 && t.y < 16 && Math.abs(t.x) < 92 && t.z > -48 && t.z < 34;
+    roofK = lerp(roofK, near ? 0 : 1, 1 - Math.exp(-dt * 4));
+    const fading = roofK < 0.995;
+    roofMats.forEach(m => { if (m.transparent !== fading) { m.transparent = fading; m.depthWrite = !fading; m.needsUpdate = true; } m.opacity = roofK; });
+    roofG.visible = roofK > 0.02;
+    roofG.traverse(o => { if (o.isMesh && o.material !== skyM) o.castShadow = roofK > 0.5; });
+  }
+
   function terminalWing(x0, x1) {
     const w = x1 - x0, cx = (x0 + x1) / 2, g = new T.Group();
     g.add(box(w, 0.6, 18, P.terminal, cx, 0.3, 5));
     { const t = TEX.floor.clone(); t.needsUpdate = true; t.repeat.set((w - 1) / 12, 16.6 / 12);
       const fl = new T.Mesh(new T.PlaneGeometry(w - 1, 16.6), new T.MeshStandardMaterial({ map: t, roughness: 0.5 })); fl.rotation.x = -Math.PI / 2; fl.position.set(cx, 0.63, 5); fl.receiveShadow = true; g.add(fl); }
-    g.add(box(w + 1, 0.3, 3.4, P.roof, cx, 4.95, -5.3));                                   // airside canopy
-    g.add(box(w, 0.4, 0.66, 0xff9f0a, cx, 4.3, 13.72));                                     // brand band on the landside wall
-    for (let x = x0 + 1; x < x1; x += 4) g.add(box(0.25, 3.4, 0.5, 0xd8d2c7, x, 2.4, 14.1)); // facade fins
-    g.add(mesh(new T.BoxGeometry(w, 4.2, 0.4), facade(w / 12, 1), cx, 2.4, 13.7));
-    const glassM = new T.MeshPhysicalMaterial({ color: 0x9fbccc, transparent: true, opacity: 0.32, roughness: 0.05, metalness: 0.2, clearcoat: 1 });
-    g.add(mesh(new T.BoxGeometry(w, 3.6, 0.2), glassM, cx, 2.4, -3.8, false, false));
-    for (let x = x0; x <= x1 + 0.01; x += 6) g.add(box(0.35, 4.2, 0.35, P.steel, x, 2.4, -3.8));
-    g.add(box(w, 0.5, 0.8, P.roof, cx, 4.6, -3.7)); g.add(box(w, 0.5, 0.8, P.roof, cx, 4.6, 13.7));
-    for (let x = x0 + 6; x < x1 - 1; x += 12) g.add(box(0.5, 0.4, 18, P.roof, x, 4.8, 5));
-    [x0, x1].forEach(x => g.add(mesh(new T.BoxGeometry(0.62, 4.2, 18), facade(18 / 12, 1), x, 2.4, 5)));
+    // landside: full-height curtain wall up to the soffit, with entrance vestibules
+    const HL = 6.0;
+    g.add(mesh(new T.BoxGeometry(w, HL, 0.3), facade(w / 12, 1.5), cx, 0.6 + HL / 2, 13.7));
+    for (let x = x0 + 1.5; x < x1; x += 3) g.add(box(0.12, HL, 0.34, 0xc7cbcf, x, 0.6 + HL / 2, 13.92));
+    g.add(box(w, 0.22, 0.5, 0xc7cbcf, cx, 3.5, 13.9));
+    const doorM = new T.MeshPhysicalMaterial({ color: 0x1b2a33, roughness: 0.05, metalness: 0.4, clearcoat: 1, emissive: 0x9a7a54, emissiveIntensity: 0 }); windowMats.push(doorM);
+    [cx - w * 0.25, cx + w * 0.25].forEach(x => { g.add(box(4.2, 2.3, 1.4, doorM, x, 1.75, 14.5)); g.add(box(4.6, 0.25, 1.6, 0xd9dcdf, x, 3.0, 14.55)); });
+    // airside: clear glass from floor to soffit with slim steel mullions
+    const HA = 5.2;
+    const glassM = new T.MeshPhysicalMaterial({ color: 0x9fbccc, transparent: true, opacity: 0.3, roughness: 0.04, metalness: 0.25, clearcoat: 1 });
+    g.add(mesh(new T.BoxGeometry(w, HA, 0.16), glassM, cx, 0.6 + HA / 2, -3.8, false, false));
+    for (let x = x0; x <= x1 + 0.01; x += 3) g.add(box(0.12, HA, 0.24, P.steel, x, 0.6 + HA / 2, -3.8));
+    g.add(box(w, 0.18, 0.28, P.steel, cx, 3.0, -3.8));
+    // gable ends follow the roof line
+    [x0, x1].forEach(x => {
+      const sh = new T.Shape(); sh.moveTo(-3.8, 0.6);
+      for (let z = -3.8; z <= 13.71; z += 1.1) sh.lineTo(z, roofY(x, z) - ROOF.th - 0.05);
+      sh.lineTo(13.7, roofY(x, 13.7) - ROOF.th - 0.05); sh.lineTo(13.7, 0.6); sh.closePath();
+      const geo = new T.ShapeGeometry(sh); geo.rotateY(-Math.PI / 2);
+      const m = new T.Mesh(geo, facade(5 / 60, 0.25)); m.material.side = T.DoubleSide; m.position.x = x; m.castShadow = true; m.receiveShadow = true; g.add(m);
+    });
     return g;
   }
   world.add(terminalWing(-72, -8)); world.add(terminalWing(8, 72));
+  // central hall: a glass drum round the foot of the tower
+  {
+    const drumM = new T.MeshPhysicalMaterial({ color: 0x8fb2c4, transparent: true, opacity: 0.34, roughness: 0.04, metalness: 0.3, clearcoat: 1, side: T.DoubleSide, depthWrite: false });
+    world.add(mesh(new T.CylinderGeometry(7.2, 7.2, 5.6, 48, 1, true), drumM, TOWER.x, 3.4, TOWER.z, false, false));
+    for (let i = 0; i < 24; i++) { const a = i / 24 * Math.PI * 2; world.add(box(0.12, 5.6, 0.12, P.steel, TOWER.x + Math.cos(a) * 7.2, 3.4, TOWER.z + Math.sin(a) * 7.2)); }
+    const ring = mesh(new T.RingGeometry(3.25, 7.7, 48, 1), mat(0xe9ebec, { roughness: 0.4, metalness: 0.4, side: T.DoubleSide }), TOWER.x, 6.25, TOWER.z); ring.rotation.x = -Math.PI / 2; world.add(ring);
+    const rim = mesh(new T.TorusGeometry(7.7, 0.14, 8, 64), mat(0xd9dcdf, { roughness: 0.3, metalness: 0.6 }), TOWER.x, 6.25, TOWER.z); rim.rotation.x = Math.PI / 2; world.add(rim);
+  }
   // team rugs, gate seating and plants inside the cut-away terminal
   {
     const floorC = new T.Color(0xf1ece3);
@@ -687,11 +789,12 @@ function mount(container, opts) {
   function makeBoard(kind, x) {
     const c = document.createElement('canvas'); c.width = 1024; c.height = 384;
     const tex = new T.CanvasTexture(c); if ('colorSpace' in tex) tex.colorSpace = T.SRGBColorSpace; tex.anisotropy = Math.min(8, maxAniso);
-    const grp = new T.Group(); grp.position.set(x, 0, 14.4);
+    // hung from the landside canopy, facing the kerb
+    const grp = new T.Group(); grp.position.set(x, 0, 15.4);
     grp.add(box(25.2, 9.8, 0.6, 0x23272e, 0, 9.9, -0.35));
     const face = new T.Mesh(new T.PlaneGeometry(24, 9), new T.MeshBasicMaterial({ map: tex, toneMapped: false })); face.position.set(0, 9.9, 0.0); grp.add(face);
-    [-9, 9].forEach(px => grp.add(box(0.5, 1.4, 0.5, 0x5c636d, px, 4.7, -0.3)));
-    grp.scale.setScalar(0.4); grp.position.y = 2.2; world.add(grp); pickable(grp, { kind: 'board', id: kind === 'dep' ? 'departures' : 'arrivals' });
+    [-9, 9].forEach(px => grp.add(box(0.18, 7.8, 0.18, 0x5c636d, px, 18.5, -0.35)));
+    grp.scale.setScalar(0.32); grp.position.y = 0.65; world.add(grp); pickable(grp, { kind: 'board', id: kind === 'dep' ? 'departures' : 'arrivals' });
     const b = { kind, c, x: c.getContext('2d'), tex, grp }; boards.push(b); return b;
   }
   const BOARD_TXT = lang === 'es'
@@ -870,26 +973,66 @@ function mount(container, opts) {
   }
   setGraph(null);
 
-  /* ---------- jet bridges ---------- */
-  const bridges = {};
+  /* ---------- jet bridges: rotunda, three telescoping tunnels, drive bogie and a cab with a canopy ----------
+     Nose-in at the stand, the forward left door of the A320 is on the +x side, about (gx + 0.67, 1.1, -19.4). */
+  const bridges = {}, bridgeLamps = [], _bp = V(0, 0, 0);
+  const bridgeTex = (() => {
+    const mk = emit => canvasTex(256, 128, (x, w, h) => {
+      if (emit) { x.fillStyle = '#000'; x.fillRect(0, 0, w, h); x.fillStyle = '#ffd9a8'; x.fillRect(0, h * 0.34, w, h * 0.36); for (let i = 0; i < 8; i++) { x.fillStyle = '#000'; x.fillRect(i * 32, h * 0.34, 3, h * 0.36); } return; }
+      x.fillStyle = '#d4d7da'; x.fillRect(0, 0, w, h);
+      for (let i = 0; i < 64; i++) { x.fillStyle = i % 2 ? '#c4c8cc' : '#dcdfe1'; x.fillRect(i * 4, 0, 2, h); }
+      x.fillStyle = '#26323b'; x.fillRect(0, h * 0.34, w, h * 0.36);
+      x.fillStyle = 'rgba(255,255,255,0.14)'; x.fillRect(0, h * 0.36, w, h * 0.08);
+      for (let i = 0; i < 8; i++) { x.fillStyle = '#9aa1a8'; x.fillRect(i * 32, h * 0.34, 3, h * 0.36); }
+      x.fillStyle = '#aeb3b8'; x.fillRect(0, h - 6, w, 6); x.fillRect(0, 0, w, 4);
+    });
+    return { map: mk(false), em: mk(true) };
+  })();
+  const SEGS = [[5.0, 1.0, 1.04], [4.8, 0.94, 0.98], [4.6, 0.88, 0.92]];
+  const plainM = mat(0xc9cdd1, { roughness: 0.45, metalness: 0.5 });
   AIRPORT_GATES.forEach(g => {
-    const grp = new T.Group();
-    // jet bridge sized to an A320 door (sill about 3.4 m)
-    grp.add(cyl(0.95, 0.95, 1.5, P.terminal, 0, 1.55, 0, 16));
-    const tube = new T.Group(); tube.position.set(0, 1.5, 0); grp.add(tube);
-    const t = box(1.0, 0.95, 1, 0xd8d4cc, 0, 0, 0.5); tube.add(t);
-    const head = box(1.35, 1.1, 1.0, 0xc9c4ba, 0, 0, 1); tube.add(head);
-    const leg = cyl(0.12, 0.12, 1.4, P.steel, 0, -0.75, 0, 8); tube.add(leg);
-    const wheels = box(0.9, 0.25, 0.4, 0x2a2e34, 0, -1.35, 0); tube.add(wheels); tube.userData.wheels = wheels;
-    grp.position.set(g.x - 6.5, 0, -6.2); world.add(grp);
-    bridges[g.id] = { tube, t, head, leg, k: 0, target: 0 };
+    const grp = new T.Group(); const R = V(g.x + 6.5, 1.6, -6.2); grp.position.set(R.x, 0, R.z);
+    const steel = mat(0xb9bec3, { roughness: 0.4, metalness: 0.55 }), dark = mat(0x2a2e33, { roughness: 0.8 });
+    grp.add(cyl(0.32, 0.38, R.y, steel, 0, R.y / 2, 0, 12));
+    grp.add(cyl(0.95, 0.95, 1.15, mat(0xcfd3d6, { roughness: 0.4, metalness: 0.4 }), 0, R.y + 0.58, 0, 20));
+    grp.add(cyl(1.02, 1.02, 0.12, steel, 0, R.y + 1.2, 0, 20));
+    grp.add(box(0.96, 1.05, 2.0, mat(0xcfd3d6, { roughness: 0.4, metalness: 0.4 }), 0, R.y + 0.55, 1.4));   // link to the terminal
+    const tube = new T.Group(); tube.position.set(0, R.y, 0); grp.add(tube);
+    const segs = SEGS.map(([len, w, h], i) => {
+      const m = new T.MeshStandardMaterial({ map: bridgeTex.map.clone(), emissiveMap: bridgeTex.em.clone(), emissive: 0xffd9a8, emissiveIntensity: 0, roughness: 0.4, metalness: 0.45 });
+      [m.map, m.emissiveMap].forEach(t => { t.needsUpdate = true; t.repeat.set(len / 4, 1); }); windowMats.push(m);
+      const s = new T.Mesh(new T.BoxGeometry(w, h, len), [m, m, plainM, plainM, plainM, plainM]); s.castShadow = true; s.receiveShadow = true; s.userData.len = len; s.position.y = h / 2; tube.add(s); return s;
+    });
+    // drive bogie: two legs and a wheel beam, kept vertical
+    const bogie = new T.Group(); grp.add(bogie);
+    [-0.32, 0.32].forEach(dx => bogie.add(box(0.14, 1, 0.14, steel, dx, 0.5, 0)));
+    bogie.add(box(1.0, 0.2, 0.3, steel, 0, 0.25, 0));
+    [-0.42, 0.42].forEach(dx => { const wh = cyl(0.2, 0.2, 0.16, dark, dx, 0.2, 0, 14); wh.rotation.z = Math.PI / 2; bogie.add(wh); });
+    // cab with the black bellows canopy on its door face
+    const cab = new T.Group(); grp.add(cab);
+    cab.add(box(1.2, 1.02, 1.1, mat(0xcfd3d6, { roughness: 0.4, metalness: 0.4 }), 0, 0.51, 0));
+    cab.add(box(1.28, 1.12, 0.28, dark, 0, 0.53, 0.66));
+    const cabLamp = glow(0xffe2b0, 1.6, 0); cabLamp.position.set(0, -0.15, 0.7); cab.add(cabLamp); bridgeLamps.push(cabLamp);
+    world.add(grp);
+    const park = V(g.x + 4.4, 1.25, -12.2), dock = V(g.x + 0.67 + 0.62 + 0.14, 1.08, -20.1);
+    bridges[g.id] = { grp, R, tube, segs, bogie, cab, park, dock, k: 0, target: 0 };
+    updateBridge(bridges[g.id], 0);
   });
   function updateBridge(b, dt) {
-    b.k = lerp(b.k, b.target, 1 - Math.exp(-dt * 1.6));
-    // rotunda sits at (gx-6.5, -6.2); the forward left door is near (gx-1.0, -17.2)
-    const len = lerp(4.5, 11.6, b.k);
-    b.tube.rotation.y = Math.PI + lerp(-0.25, -0.46, b.k);
-    b.t.scale.z = len; b.t.position.z = len / 2; b.head.position.z = len + 0.5; b.leg.position.z = len - 0.6; b.tube.userData.wheels.position.z = len - 0.6;
+    b.k = dt ? lerp(b.k, b.target, 1 - Math.exp(-dt * 1.2)) : b.k;
+    const e = smooth(clamp(b.k, 0, 1));
+    _bp.lerpVectors(b.park, b.dock, e);
+    const dx = _bp.x - b.R.x, dz = _bp.z - b.R.z, flat = Math.hypot(dx, dz), dy = _bp.y - b.R.y;
+    const yaw = Math.atan2(dx, dz), len = Math.max(6, flat - 0.55);
+    b.tube.rotation.set(0, 0, 0); b.tube.rotation.y = yaw; b.tube.rotateX(-Math.atan2(dy, flat));
+    const [s1, s2, s3] = b.segs;
+    const p1 = 0.9, p3 = len - s3.userData.len, p2 = (p1 + p3) / 2;
+    s1.position.z = p1 + s1.userData.len / 2; s2.position.z = p2 + s2.userData.len / 2; s3.position.z = p3 + s3.userData.len / 2;
+    // bogie under the last tunnel, a little behind the cab
+    const bd = len - 2.4, bx = b.R.x + Math.sin(yaw) * bd, bz = b.R.z + Math.cos(yaw) * bd, by = b.R.y + dy * (bd / flat);
+    b.bogie.position.set(bx - b.R.x, 0, bz - b.R.z); b.bogie.rotation.y = yaw; b.bogie.children[0].scale.y = b.bogie.children[1].scale.y = by; b.bogie.children[0].position.y = b.bogie.children[1].position.y = by / 2;
+    b.cab.position.set(_bp.x - b.R.x, _bp.y, _bp.z - b.R.z);
+    b.cab.rotation.y = angLerp(yaw, -Math.PI / 2, e);
   }
 
   /* ---------- signs ---------- */
@@ -908,8 +1051,7 @@ function mount(container, opts) {
   }
   AIRPORT_GATES.forEach(g => {
     if (g.id === 'D') return;
-    const s = signSprite(g.id, L.teams[g.team], g.color); s.position.set(g.x - 6, 6.6, -4.5); world.add(s);
-    world.add(cyl(0.08, 0.08, 1.6, P.steel, g.x - 6, 5.6, -4.2, 6));
+    const s = signSprite(g.id, L.teams[g.team], g.color); s.position.set(g.x - 6, 7.8, -5.2); world.add(s);
   });
 
   /* ---------- hangar (code workshop) ---------- */
@@ -1853,7 +1995,7 @@ function mount(container, opts) {
   });
   function servicePos(st, k) {
     const x = st.x;
-    return { bag: { p: V(x + 3.4, 0, STAND_Z - 3.4), face: 0 }, fuel: { p: V(x + 7.4, 0, STAND_Z - 1.0), face: 0 }, cater: { p: V(x + 2.8, 0, STAND_Z + 3.4), face: -Math.PI / 2 }, tug: { p: V(x, 0, STAND_Z + 7.4), face: Math.PI } }[k];
+    return { bag: { p: V(x + 3.4, 0, STAND_Z - 3.4), face: 0 }, fuel: { p: V(x + 7.4, 0, STAND_Z - 1.0), face: 0 }, cater: { p: V(x - 2.8, 0, STAND_Z + 3.4), face: Math.PI / 2 }, tug: { p: V(x, 0, STAND_Z + 7.4), face: Math.PI } }[k];
   }
   function driveTo(v, target, face, cb) {
     const a = v.g.position, midZ = -12.6;
@@ -1945,7 +2087,7 @@ function mount(container, opts) {
     switch (ac.phase) {
       case 0: bridges[gid].target = 1; if (ac.timer > 2.5) { ac.phase = 1; ac.timer = 0; setStep(ac, 1); driveTo(st.bag, servicePos(st, 'bag').p, 0, () => { st.bag.state = 'working'; }); } break;
       case 1:
-        if (ac.timer > 3 && !ac.caterSent) { ac.caterSent = true; driveTo(st.cater, servicePos(st, 'cater').p, -Math.PI / 2, () => { st.cater.state = 'working'; st.cater.lift = 1; }); }
+        if (ac.timer > 3 && !ac.caterSent) { ac.caterSent = true; driveTo(st.cater, servicePos(st, 'cater').p, servicePos(st, 'cater').face, () => { st.cater.state = 'working'; st.cater.lift = 1; }); }
         if (ac.timer > 9) { ac.phase = 2; ac.timer = 0; setStep(ac, 2); driveHome(st.bag); const w = gateAgents(gid).filter(p => p.agent.state === 'working'); if (w.length && Math.random() < 0.7) sendWalk(w[Math.floor(Math.random() * w.length)], 'brain'); }
         break;
       case 2:
@@ -2165,12 +2307,15 @@ function mount(container, opts) {
     flash.intensity = ENV.lightning * 3 * LS;
     renderer.toneMappingExposure = lerp(1.12, 0.9, k);
     windowMats.forEach(m => m.emissiveIntensity = k * 0.95);
+    soffitMats.forEach(m => m.emissiveIntensity = k * 0.32);
+    updateRoof(dt);
     deskGlows.forEach(g => g.material.opacity = k * 0.8);
     edgeMats.forEach(e => { e.m.color.setHex(e.c).multiplyScalar(0.35 + k * 0.9); });
     approachGlows.forEach((s, i) => s.material.opacity = k * (((SIM.t * 2 - i * 0.12) % 1) < 0.15 ? 1 : 0.3));
     lampMats.forEach(m => m.color.setHex(k > 0.45 ? 0xfff2c8 : 0x8a8a8a));
     beaconM.color.setHex(k > 0.45 ? ((SIM.t % 1.4) < 0.7 ? 0xff453a : 0x5a1a14) : 0xb23a2a);
     floodGlows.forEach(g => g.material.opacity = k * 0.8);
+    bridgeLamps.forEach(g => g.material.opacity = k * 0.7);
     beam.material.opacity = 0.04 + k * 0.07;
     pools.forEach(m => m.material.opacity = k * 0.26);
     nightLights.forEach(([l, i]) => { l.intensity = k * i * (LS > 1 ? 1 : 0.3); l.visible = k > 0.05; });
@@ -2238,7 +2383,7 @@ function mount(container, opts) {
     () => { flyTo(V(-112, 2, -28), isPhone ? 100 : 70, -1.5, 0.95, 2600, null); return 7; },
     () => { flyTo(V(SHIP_POS.x + 6, 4, SHIP_POS.z), isPhone ? 110 : 70, 0.35, 1.05, 2800, null); return 8; },
     () => { const b = SIM.boats.find(b => b.state === 'inbound' || b.state === 'outbound'); if (!b) return 0; flyTo(followPoint(b.g), isPhone ? 60 : 40, -0.6, 1.0, 2600, b.g); return 8; },
-    () => { flyTo(V(-40, 6.2, 14.4), isPhone ? 40 : 26, 0.15, 1.36, 2600, null); return 7; },
+    () => { flyTo(V(-40, 4.2, 15.4), isPhone ? 40 : 26, 0.15, 1.36, 2600, null); return 7; },
     () => { flyTo(V(-4, 6, -20), isPhone ? 470 : 300, -0.62, 0.9, 3000, null); return 8; }
   ];
   function tour(on) { TOUR.on = on; TOUR.t = 0; if (!on) CAM.follow = null; UI && UI.tourState && UI.tourState(on); }
@@ -2550,7 +2695,7 @@ function mount(container, opts) {
   }
 
   return {
-    flyArea, select, clearSel, objFor, AREAS, SIM, ENV, CAM, people, fleet: fleetObjs, setGraph, onAgents, startSweep, dispose, tour, TOUR, updateBoards, craft, ship: SHIP, scene, renderer, hemi, sun,
+    flyArea, select, clearSel, objFor, AREAS, SIM, ENV, CAM, bridges, people, fleet: fleetObjs, setGraph, onAgents, startSweep, dispose, tour, TOUR, updateBoards, craft, ship: SHIP, scene, renderer, hemi, sun,
     brainInfo: () => ({ nodes: BR.centers.length, links: BR.edgeCount || 0, hot: BR.centers.filter(c => c.node.hot).length }),
     vanInfo: () => van,
     vehicleOf: id => SIM.vehicles.find(v => v.id === id),

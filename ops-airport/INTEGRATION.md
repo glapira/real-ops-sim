@@ -20,7 +20,9 @@
 | Fleet stands | `opts.fleet` (your two aircraft) |
 | Harbour on the Med, port office S · Ship team | `team: "ship"` agents sit in the port office on the quay. Their work, and any arrival that mentions a ship, vessel, port call, bunkering, crew change or rescue, comes in by launch, moors and runs Moored, Read, Check, Book, File, Cast off |
 | Rescue vessel alongside the quay | `opts.ship = { name, label, imo, loa, beam }`. Click it for its details and the ship team |
-| Split-flap boards on the terminal roof | Departures from `departures[]` (Boarding when due within 3 h, Overdue in red), Arrivals from `arrivals[]` or the latest `feed[]` rows. Click a board to open its list |
+| Split-flap boards under the landside canopy | Departures from `departures[]` (Boarding when due within 3 h, Overdue in red), Arrivals from `arrivals[]` or the latest `feed[]` rows. Click a board to open its list |
+| Terminal roof | A curved standing-seam roof with a wood soffit, skylights and a long landside canopy over the kerb. It fades out when you zoom in on the gates (Gates view, or any close look from above), so the teams stay visible, and comes back on the overview |
+| Jet bridges | One per gate. Each one swings out and docks at the forward left door when a flight is on block, then pulls back before pushback |
 | Tour button | a slow cinematic glide: brain, a moving flight, the gates, a turnaround, the workshop, the fleet, the boards, then the overview. Any touch stops it |
 | Clocks | Madrid large, the Mac's local zone if different, then `clocks.zones`, then the countdown to `next_run_at` |
 | Usage rings | `usage.five_hour` and `usage.seven_day`, with a tick at `usage.cap` |
