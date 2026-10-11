@@ -10,6 +10,7 @@
 | Gate B · Ledger AI | `team: "ledger"` agents (Reader, Assistant) |
 | Gate C · Mac | `team: "mac"` agents (Mac clerk, Memory curator) |
 | Hangar D · Code team | `team: "code"` agents (Router, Triage, Scout, Quick, Build, Deep, Escalate, Verifier, Workflow) |
+| Port office S · Ship team | `team: "ship"` agents (people or agents of the NGO's ship side). To give them work, add them to `ops_room.agents` with `team: "ship"` and log their events like any other agent |
 | People at desks | `agents[]`. `working` types with a lit screen, `resting` sips coffee or walks to the coffee point, `off` leaves an empty chair |
 | Aircraft landing and taxiing in | new rows in `arrivals[]` and `feed[]` (one flight per row, gate picked from the row's `agent`) |
 | Turnaround on stand | On block, Read, Check, Book, File, Pushback (bottom-left tracker) |
@@ -17,6 +18,8 @@
 | Tower and floating brain | `ops_graph` nodes, clustered by type: cards front left, parties front right, notes on top, documents back left, people back right. `hot` nodes pulse. Edges are the faint lines |
 | Radar and the blue van | Jarvis. While `jarvis.state === "working"` the radar spins fast, rings go out over the field and the van drives the apron. Gate A walks to the brain when a sweep starts |
 | Fleet stands | `opts.fleet` (your two aircraft) |
+| Harbour on the Med, port office S · Ship team | `team: "ship"` agents sit in the port office on the quay. Their work, and any arrival that mentions a ship, vessel, port call, bunkering, crew change or rescue, comes in by launch, moors and runs Moored, Read, Check, Book, File, Cast off |
+| Rescue vessel alongside the quay | `opts.ship = { name, label, imo, loa, beam }`. Click it for its details and the ship team |
 | Split-flap boards on the terminal roof | Departures from `departures[]` (Boarding when due within 3 h, Overdue in red), Arrivals from `arrivals[]` or the latest `feed[]` rows. Click a board to open its list |
 | Tour button | a slow cinematic glide: brain, a moving flight, the gates, a turnaround, the workshop, the fleet, the boards, then the overview. Any touch stops it |
 | Clocks | Madrid large, the Mac's local zone if different, then `clocks.zones`, then the countdown to `next_run_at` |
@@ -44,6 +47,7 @@ const room = OpsAirport.mount(cardEl, {
     { reg: 'P4-8000', type: 'global', label: 'Bombardier Global 8000' },
     { reg: 'DO228NXT', type: 'do228', label: 'Dornier 228 NXT' }
   ],
+  ship: { name: 'Solidaire', label: 'Rescue vessel', imo: '9224817', loa: 66, beam: 15.03 },
   onOpen: (link) => { if (link) location.hash = link; }
 });
 // existing polling: ops_room every 15 s, ops_graph every 60 s, paused when hidden

@@ -26,7 +26,11 @@
     A('deep', 'Deep', 'Hard problems', 'Problemas difíciles', 'code', 'Opus 5.5', 'xhigh', 'off', '', '', 0, 0, null),
     A('escalate', 'Escalate', 'Last resort reviewer', 'Revisor de último recurso', 'code', 'Fable 5.1', '', 'off', '', '', 0, 0, null),
     A('verifier', 'Verifier', 'Runs the checks', 'Pasa las pruebas', 'code', 'Sonnet 5.5', '', 'working', 'Running smoke tests', 'Pasando pruebas', 5, 5, [15, 'All smoke tests green', 'Todas las pruebas en verde']),
-    A('workflow', 'Workflow', 'Runs multi-step jobs', 'Ejecuta trabajos en varios pasos', 'code', 'Opus 5.5', '', 'off', '', '', 1, 1, [300, 'Finished a nightly check', 'Terminó una revisión nocturna'])
+    A('workflow', 'Workflow', 'Runs multi-step jobs', 'Ejecuta trabajos en varios pasos', 'code', 'Opus 5.5', '', 'off', '', '', 1, 1, [300, 'Finished a nightly check', 'Terminó una revisión nocturna']),
+    A('ship-ops', 'Ship ops', 'Port calls, agents and berths', 'Escalas, agentes y atraques', 'ship', 'Sonnet 5.5', '', 'working', 'Booking a berth for the next port call', 'Reservando atraque para la próxima escala', 5, 3, [25, 'Confirmed the pilot booking', 'Confirmó el práctico']),
+    A('crew-desk', 'Crew desk', 'Crew lists, changes and certificates', 'Tripulación, relevos y certificados', 'ship', 'Sonnet 5.5', '', 'resting', '', '', 2, 2, [80, 'Updated the crew list', 'Actualizó la lista de tripulación']),
+    A('supplies', 'Supplies', 'Bunkering, stores and spares', 'Combustible, víveres y repuestos', 'ship', 'Haiku 5.5', '', 'working', 'Checking a bunker quote', 'Revisando un presupuesto de combustible', 4, 4, [10, 'Ordered medical stores', 'Pidió material médico']),
+    A('mission-log', 'Mission log', 'Rescue reports and the logbook', 'Informes de rescate y cuaderno', 'ship', 'Opus 5.5', '', 'off', '', '', 1, 1, [240, 'Filed a mission report', 'Archivó un informe de misión'])
   ];
 
   const feedSrc = [
@@ -45,18 +49,24 @@
     [-35, 'second-opinion', 'Agreed with a fuel price check', 'Confirmó la revisión de precio de combustible'],
     [-25, 'reader', 'Read a parts quote', 'Leyó un presupuesto de repuestos'],
     [-14, 'mac-clerk', 'Filed 3 supplier PDFs to the vault', 'Archivó 3 PDF de proveedores'],
-    [-6, 'jarvis', 'Booked a handling invoice', 'Asentó una factura de handling']
+    [-6, 'jarvis', 'Booked a handling invoice', 'Asentó una factura de handling'],
+    [-132, 'ship-ops', 'Port call booked for the rescue vessel', 'Escala reservada para el buque'],
+    [-74, 'supplies', 'Bunker quote received for the vessel', 'Presupuesto de combustible para el buque'],
+    [-38, 'crew-desk', 'Crew change list sent to the port agent', 'Lista de relevo enviada al agente'],
+    [-16, 'mission-log', 'Rescue mission report filed', 'Informe de misión de rescate archivado']
   ];
   const feed = feedSrc.map(([m, agent, what, what_es]) => ({ at: iso(m), agent, what, what_es, link: '#/ledger' }));
   const arrivals = [
     [-120, 'Fuel statement for September', 'Extracto de combustible de septiembre'],
     [-70, 'Handling invoice', 'Factura de handling'],
     [-30, 'Contract draft for review', 'Borrador de contrato para revisar'],
-    [-9, 'Crew training invoice', 'Factura de formación de tripulación']
+    [-9, 'Crew training invoice', 'Factura de formación de tripulación'],
+    [-50, 'Port agent invoice for the vessel', 'Factura del agente del buque']
   ].map(([m, what, what_es]) => ({ at: iso(m), what, what_es, link: '#/inbox' }));
   const departures = [
     [45, 'Reply to the fuel supplier', 'Responder al proveedor de combustible'],
     [120, 'Pay the handling invoice', 'Pagar la factura de handling'],
+    [200, 'Bunkering at the next port call', 'Combustible en la próxima escala'],
     [300, 'Renewal decision on the service contract', 'Decidir la renovación del contrato'],
     [1440, 'Monthly close', 'Cierre mensual'],
     [2880, 'Insurance documents due', 'Vencen los documentos del seguro']

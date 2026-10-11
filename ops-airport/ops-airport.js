@@ -42,11 +42,13 @@ const STR = {
     brainTitle: 'Jarvis brain', brainSub: 'Cards, people, notes and documents the agents read', nodes: 'nodes', links: 'links', hot: 'touched in the last 3 h',
     sweepNow: 'Jarvis is sweeping', sweepIdle: 'Radar idle', list: 'List', reset: 'Reset view',
     flight: 'Flight', aircraft: 'Aircraft', vehicle: 'Vehicle', at: 'Time', due: 'Due', sample: 'Sample',
-    st: { Queued: 'Queued', Inbound: 'Inbound', Landed: 'Landed', 'Taxi in': 'Taxi in', 'On block': 'On block', Read: 'Reading', Check: 'Checking', Book: 'Booking', File: 'Filing', Pushback: 'Pushback', 'Taxi out': 'Taxi out', Departed: 'Departed' },
-    teams: { cloud: 'Cloud · Jarvis', ledger: 'Ledger AI', mac: 'Mac', code: 'Code team' },
+    st: { Moored: 'Moored', 'Cast off': 'Casting off', Outbound: 'Outbound', Queued: 'Queued', Inbound: 'Inbound', Landed: 'Landed', 'Taxi in': 'Taxi in', 'On block': 'On block', Read: 'Reading', Check: 'Checking', Book: 'Booking', File: 'Filing', Pushback: 'Pushback', 'Taxi out': 'Taxi out', Departed: 'Departed' },
+    teams: { cloud: 'Cloud · Jarvis', ledger: 'Ledger AI', mac: 'Mac', code: 'Code team', ship: 'Ship team' },
+    harbour: 'Harbour', boat: 'Launch', vessel: 'Vessel', crew: 'Ship team', loa: 'Length', beam: 'Beam', imo: 'IMO',
+    stepsShip: ['Moored', 'Read', 'Check', 'Book', 'File', 'Cast off'],
     veh: { tug: 'Pushback tug', bag: 'Page loader', fuel: 'Ledger bowser', cater: 'Check lift', van: 'Jarvis sweep van' },
     vehWhat: { tug: 'Pushes finished work out of the gate', bag: 'Unloads the pages of a document', fuel: 'Books the figures into the ledger', cater: 'Lifts the item up for a second look', van: 'Drives the apron while Jarvis sweeps mail, cards and contracts' },
-    teamWhat: { cloud: 'Mail, contracts and second opinions, swept from the cloud', ledger: 'Reads documents and answers inside the ledger', mac: 'PDF filing, backup, vault and memory', code: 'Builds and fixes AeroLedger itself' }
+    teamWhat: { cloud: 'Mail, contracts and second opinions, swept from the cloud', ledger: 'Reads documents and answers inside the ledger', mac: 'PDF filing, backup, vault and memory', code: 'Builds and fixes AeroLedger itself', ship: 'Port calls, crew, supplies and mission paperwork for the rescue vessel' }
   },
   es: {
     title: 'Sala de operaciones', live: 'En vivo', replay: 'Repetición', overview: 'Vista general', gates: 'Puertas', brain: 'Cerebro', workshop: 'Taller',
@@ -62,11 +64,13 @@ const STR = {
     brainTitle: 'Cerebro de Jarvis', brainSub: 'Fichas, personas, notas y documentos que leen los agentes', nodes: 'nodos', links: 'enlaces', hot: 'tocados en las últimas 3 h',
     sweepNow: 'Jarvis está barriendo', sweepIdle: 'Radar en espera', list: 'Lista', reset: 'Restablecer vista',
     flight: 'Vuelo', aircraft: 'Avión', vehicle: 'Vehículo', at: 'Hora', due: 'Vence', sample: 'Ejemplo',
-    st: { Queued: 'En cola', Inbound: 'En aproximación', Landed: 'Aterrizado', 'Taxi in': 'Rodando', 'On block': 'En calzos', Read: 'Leyendo', Check: 'Revisando', Book: 'Asentando', File: 'Archivando', Pushback: 'Remolque', 'Taxi out': 'Rodando a pista', Departed: 'Despegado' },
-    teams: { cloud: 'Nube · Jarvis', ledger: 'IA del libro', mac: 'Mac', code: 'Equipo de código' },
+    st: { Moored: 'Amarrado', 'Cast off': 'Largando', Outbound: 'Saliendo', Queued: 'En cola', Inbound: 'En aproximación', Landed: 'Aterrizado', 'Taxi in': 'Rodando', 'On block': 'En calzos', Read: 'Leyendo', Check: 'Revisando', Book: 'Asentando', File: 'Archivando', Pushback: 'Remolque', 'Taxi out': 'Rodando a pista', Departed: 'Despegado' },
+    teams: { cloud: 'Nube · Jarvis', ledger: 'IA del libro', mac: 'Mac', code: 'Equipo de código', ship: 'Equipo del barco' },
+    harbour: 'Puerto', boat: 'Lancha', vessel: 'Buque', crew: 'Equipo del barco', loa: 'Eslora', beam: 'Manga', imo: 'IMO',
+    stepsShip: ['Amarrado', 'Leído', 'Revisión', 'Asiento', 'Archivo', 'Largar'],
     veh: { tug: 'Tractor de remolque', bag: 'Cargador de páginas', fuel: 'Cisterna del libro', cater: 'Elevador de revisión', van: 'Furgoneta de Jarvis' },
     vehWhat: { tug: 'Saca de la puerta el trabajo terminado', bag: 'Descarga las páginas de un documento', fuel: 'Asienta las cifras en el libro', cater: 'Sube el elemento para una segunda mirada', van: 'Recorre la plataforma mientras Jarvis barre correo, fichas y contratos' },
-    teamWhat: { cloud: 'Correo, contratos y segundas opiniones desde la nube', ledger: 'Lee documentos y responde dentro del libro', mac: 'Archivo de PDF, copia, bóveda y memoria', code: 'Construye y arregla AeroLedger' }
+    teamWhat: { cloud: 'Correo, contratos y segundas opiniones desde la nube', ledger: 'Lee documentos y responde dentro del libro', mac: 'Archivo de PDF, copia, bóveda y memoria', code: 'Construye y arregla AeroLedger', ship: 'Escalas, tripulación, suministros y papeles de misión del buque' }
   }
 };
 const STEP_KEYS = ['On block', 'Read', 'Check', 'Book', 'File', 'Pushback'];
@@ -76,9 +80,11 @@ const TEAMS = [
   { team: 'cloud',  id: 'A', x: -54, color: '#3E6A93' },
   { team: 'ledger', id: 'B', x: -24, color: '#D9782D' },
   { team: 'mac',    id: 'C', x: 24,  color: '#8A6A4C' },
-  { team: 'code',   id: 'D', x: 54,  color: '#4E7D66' }
+  { team: 'code',   id: 'D', x: 54,  color: '#4E7D66' },
+  { team: 'ship',   id: 'S', x: 111, color: '#2F6E8E', port: true }
 ];
-const FLIGHT_PREFIX = { A: 'JRV', B: 'LDG', C: 'MAC', D: 'DEV' };
+const AIRPORT_GATES = TEAMS.filter(g => !g.port);
+const FLIGHT_PREFIX = { A: 'JRV', B: 'LDG', C: 'MAC', D: 'DEV', S: 'SHP' };
 const TYPE_OF_AGENT = { jarvis: 'mail', 'contract-desk': 'contract', 'second-opinion': 'contract', reader: 'invoice', assistant: 'invoice', 'mac-clerk': 'file', 'memory-curator': 'file' };
 
 let cssInjected = false;
@@ -107,8 +113,10 @@ function mount(container, opts) {
   const txt = (o, k) => (lang === 'es' && o && o[k + '_es']) ? o[k + '_es'] : (o ? o[k] : '');
 
   function hashStr(s) { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return (h >>> 0); }
+  const SHIP_RX = /\b(ship|vessel|buque|barco|port call|escala|puerto|bunker|crew change|relevo|rescue|rescate|imo|berth|atraque|mooring|amarre|maritime|mar[ií]tim)/i;
   function typeOf(what, agentId, team) {
     const w = (what || '').toLowerCase();
+    if (team === 'ship') return 'ship';
     if (/invoice|factura|payment|pago|bank|banco|statement|extracto|swift|fuel|combustible/.test(w)) return 'invoice';
     if (/contract|contrato|sign|firm|nda|agreement|acuerdo|offer|oferta/.test(w)) return 'contract';
     if (/pdf|backup|copia|vault|bóveda|archiv|memory|memoria/.test(w)) return 'file';
@@ -118,7 +126,7 @@ function mount(container, opts) {
   function makeItem(src, kind) {
     const agentId = src.agent || (kind === 'arrival' ? 'jarvis' : null);
     const ag = agentId && D.byId.get(agentId);
-    const team = ag ? ag.team : 'cloud';
+    const team = ag ? ag.team : (SHIP_RX.test(src.what || '') ? 'ship' : 'cloud');
     const gate = teamOf(team);
     const key = kind + '|' + (src.at || src.due || '') + '|' + (src.what || '');
     const n = hashStr(key) % 900 + 100;
@@ -204,8 +212,8 @@ function mount(container, opts) {
     terminal: 0xf5f3ef, glass: 0x9fc4d6, roof: 0xe4ded4, steel: 0xb4b9c0, tower: 0xf3f0ea,
     yellow: 0xf2c14e, tug: 0xf2c14e, fuel: 0x5b8def, road: 0x8b8e93, tree: 0x86a872, trunk: 0x8b6b4a,
     skin: [0xf1c7a3, 0xd9a07a, 0xa8714f, 0x7b4a32, 0xf6d8bf],
-    shirt: { A: 0x3e6a93, B: 0xd9782d, C: 0x8a6a4c, D: 0x4e7d66 },
-    livery: { mail: 0x3e6a93, invoice: 0xd9782d, contract: 0x6b3a1e, code: 0x4e7d66, file: 0xa8875a },
+    shirt: { A: 0x3e6a93, B: 0xd9782d, C: 0x8a6a4c, D: 0x4e7d66, S: 0x2f6e8e },
+    livery: { mail: 0x3e6a93, invoice: 0xd9782d, contract: 0x6b3a1e, code: 0x4e7d66, file: 0xa8875a, ship: 0x2f6e8e },
     node: { card: 0x4caf72, party: 0x4f86b8, note: 0xd4a95a, doc: 0xc0712f, person: 0x6fb3c2, other: 0xd9c27a }
   };
 
@@ -288,7 +296,7 @@ function mount(container, opts) {
      x east, z south (toward the viewer), y up.
      Runway z = -66, taxiway z = -48, stands z = -24,
      terminal z = -4..14 with the tower in the middle, landside z > 18. */
-  const RWY_Z = -66, TWY_Z = -48, STAND_Z = -24;
+  const RWY_Z = -66, TWY_Z = -48, STAND_Z = -24, COAST_Z = -96, SEA_Y = -0.15;
   const HANGAR = { x: 104, z: -12 };
   const TOWER = { x: 0, z: 6 };
   const world = new T.Group(); scene.add(world);
@@ -343,6 +351,10 @@ function mount(container, opts) {
       x.fillStyle = '#f2f0ea'; for (let i = 0; i < w; i += 64) x.fillRect(i, h / 2 - 1, 34, 2);
       x.fillRect(0, 4, w, 1.4); x.fillRect(0, h - 5.4, w, 1.4);
     }),
+    sand: canvasTex(256, 256, (x, w, h) => {
+      x.fillStyle = '#e2d2aa'; x.fillRect(0, 0, w, h);
+      speckle(x, w, h, 4000, ['#d4c294', '#efe2c2', '#c9b585', '#f6ecd4'], 0.6, 1.4);
+    }),
     floor: canvasTex(256, 256, (x, w, h) => {
       x.fillStyle = '#f1ece3'; x.fillRect(0, 0, w, h);
       speckle(x, w, h, 2500, ['#e3dccf', '#faf7f1', '#d9d0c1', '#c9bfae'], 0.6, 1.5);
@@ -379,8 +391,8 @@ function mount(container, opts) {
 
   /* ---------- ground ---------- */
   {
-    const g = new T.Mesh(new T.PlaneGeometry(1400, 1100), (() => { const t = TEX.grass.clone(); t.needsUpdate = true; t.repeat.set(1400 / 44, 1100 / 44); return new T.MeshStandardMaterial({ map: t, roughness: 0.95 }); })());
-    g.rotation.x = -Math.PI / 2; g.position.set(0, -0.02, -10); g.receiveShadow = true; world.add(g);
+    const g = new T.Mesh(new T.PlaneGeometry(1400, 640), (() => { const t = TEX.grass.clone(); t.needsUpdate = true; t.repeat.set(1400 / 44, 640 / 44); return new T.MeshStandardMaterial({ map: t, roughness: 0.95 }); })());
+    g.rotation.x = -Math.PI / 2; g.position.set(0, -0.02, COAST_Z + 2 + 320); g.receiveShadow = true; world.add(g);
     surface(TEX.concrete, 196, 40, 0, 0.06, -26, 40);                      // main apron
     surface(TEX.concrete, 48, 54, HANGAR.x, 0.07, -24, 40);                 // hangar apron
     surface(TEX.concrete, 58, 34, -105, 0.07, -27, 40);                     // fleet apron
@@ -391,7 +403,7 @@ function mount(container, opts) {
     const rm = new T.MeshStandardMaterial({ map: rt, roughness: 0.82 }); surfMats.push(rm);
     const rw = new T.Mesh(new T.PlaneGeometry(RWY.x1 - RWY.x0, RWY.w), rm); rw.rotation.x = -Math.PI / 2; rw.position.set((RWY.x0 + RWY.x1) / 2, 0.12, RWY_Z); rw.receiveShadow = true; world.add(rw);
     // stand markings
-    TEAMS.forEach(g => { world.add(flat(0.35, 22, P.yellow, g.x, 0.15, -36)); world.add(flat(5, 0.35, P.yellow, g.x, 0.15, -18.6)); world.add(flat(16, 0.25, 0xd9473a, g.x, 0.15, -13.2)); });
+    AIRPORT_GATES.forEach(g => { world.add(flat(0.35, 22, P.yellow, g.x, 0.15, -36)); world.add(flat(5, 0.35, P.yellow, g.x, 0.15, -18.6)); world.add(flat(16, 0.25, 0xd9473a, g.x, 0.15, -13.2)); });
     [-112, -88].forEach(x => world.add(flat(0.35, 20, P.yellow, x, 0.15, -32)));
     world.add(flat(190, 0.3, 0xf4f3ee, 0, 0.15, -10.8));                    // service road edge
     surface(TEX.road, 430, 9, 0, 0.06, 34, 32, 9, 0, false);
@@ -492,9 +504,9 @@ function mount(container, opts) {
   // team rugs, gate seating and plants inside the cut-away terminal
   {
     const floorC = new T.Color(0xf1ece3);
-    TEAMS.forEach(g => { if (g.id === 'D') return; const rug = new T.Mesh(new T.PlaneGeometry(14.5, 10.5), new T.MeshStandardMaterial({ color: floorC.clone().lerp(new T.Color(g.color), 0.2), roughness: 0.95 })); rug.rotation.x = -Math.PI / 2; rug.position.set(g.x, 0.66, 5.4); rug.receiveShadow = true; world.add(rug); });
+    AIRPORT_GATES.forEach(g => { if (g.id === 'D') return; const rug = new T.Mesh(new T.PlaneGeometry(14.5, 10.5), new T.MeshStandardMaterial({ color: floorC.clone().lerp(new T.Color(g.color), 0.2), roughness: 0.95 })); rug.rotation.x = -Math.PI / 2; rug.position.set(g.x, 0.66, 5.4); rug.receiveShadow = true; world.add(rug); });
     const seatG = new T.BoxGeometry(0.8, 0.9, 0.8), seats = []; 
-    TEAMS.forEach(g => { if (g.id === 'D') return; for (let r = 0; r < 2; r++) for (let i = 0; i < 7; i++) seats.push([g.x - 9 + i * 0.95 - 8, -1.7 + r * 1.3]); });
+    AIRPORT_GATES.forEach(g => { if (g.id === 'D') return; for (let r = 0; r < 2; r++) for (let i = 0; i < 7; i++) seats.push([g.x - 9 + i * 0.95 - 8, -1.7 + r * 1.3]); });
     const sm = new T.InstancedMesh(seatG, mat(0x3b4a5e), seats.length); const o = new T.Object3D();
     seats.forEach(([x, z], i) => { o.position.set(x + 8, 1.1, z); o.updateMatrix(); sm.setMatrixAt(i, o.matrix); }); sm.castShadow = true; world.add(sm);
     const potG = new T.CylinderGeometry(0.5, 0.4, 0.8, 10), leafG = new T.IcosahedronGeometry(0.9, 0);
@@ -690,7 +702,7 @@ function mount(container, opts) {
 
   /* ---------- jet bridges ---------- */
   const bridges = {};
-  TEAMS.forEach(g => {
+  AIRPORT_GATES.forEach(g => {
     const grp = new T.Group();
     grp.add(cyl(1.6, 1.6, 3.2, P.terminal, 0, 2.4, 0, 16));
     const tube = new T.Group(); tube.position.set(0, 2.6, 0); grp.add(tube);
@@ -722,7 +734,7 @@ function mount(container, opts) {
     const t = new T.CanvasTexture(c); if ('colorSpace' in t) t.colorSpace = T.SRGBColorSpace;
     const s = new T.Sprite(new T.SpriteMaterial({ map: t, transparent: true, depthWrite: false })); s.scale.set(w, w / 4, 1); signs.push(s); return s;
   }
-  TEAMS.forEach(g => {
+  AIRPORT_GATES.forEach(g => {
     if (g.id === 'D') return;
     const s = signSprite(g.id, L.teams[g.team], g.color); s.position.set(g.x - 6, 8.6, -4.5); world.add(s);
     world.add(cyl(0.12, 0.12, 3.6, P.steel, g.x - 6, 5.6, -4.2, 6));
@@ -752,7 +764,7 @@ function mount(container, opts) {
     for (let x = -80; x <= 80; x += 10) if (Math.abs(x) > 8) spots.push([x, 27.5]);
     for (let i = 0; i < 46; i++) spots.push([-200 + r() * 34, -4 + r() * 60]);
     for (let i = 0; i < 46; i++) spots.push([150 + r() * 46, 10 + r() * 50]);
-    for (let i = 0; i < 30; i++) spots.push([-200 + r() * 400, -96 - r() * 40]);
+    for (let i = 0; i < 26; i++) { const x = -200 + r() * 340; if (x > 30) continue; spots.push([x, -79 - r() * 10]); }
     const trunks = new T.InstancedMesh(trunkG, mat(P.trunk), spots.length), crowns = new T.InstancedMesh(crownG, mat(P.tree, { flatShading: true }), spots.length);
     trunks.castShadow = crowns.castShadow = true;
     const o = new T.Object3D();
@@ -815,6 +827,7 @@ function mount(container, opts) {
   const deskSlots = {};
   function seatFor(gate, i) {
     if (gate.id === 'D') { const col = i % 3, row = Math.floor(i / 3); return { x: HANGAR.x - 10 + col * 7, z: HANGAR.z + 2 + row * 3.8, y: 0.42 }; }
+    if (gate.id === 'S') { const col = i % 3, row = Math.floor(i / 3); return { x: 105.5 + col * 5, z: -104 - row * 4.4, y: QUAY.top + 0.06 }; }
     const col = i % 3, row = Math.floor(i / 3); return { x: gate.x - 6 + (col - 1) * 4.4 + 6, z: 1.6 + row * 4.4, y: 0.62 };
   }
   function addPerson(a) {
@@ -841,7 +854,7 @@ function mount(container, opts) {
     const j = D.byId.get('jarvis');
     if (j && j.justStarted) startSweep();
   }
-  const coffee = [V(-40, 0.8, 11), V(40, 0.8, 11), V(HANGAR.x + 12, 0.6, HANGAR.z + 10)];
+  const coffee = [V(-40, 0.8, 11), V(40, 0.8, 11), V(HANGAR.x + 12, 0.6, HANGAR.z + 10), V(118, 0.84, -103)];
   coffee.forEach(c => { world.add(box(2.4, 1.6, 1, 0x6b4f3a, c.x, c.y + 0.6, c.z + 1.4)); world.add(box(0.8, 0.5, 0.6, 0x2b2b2b, c.x - 0.5, c.y + 1.65, c.z + 1.4)); });
   function walkPath(from, to, viaCenter) {
     const pts = [[from.x, from.z]];
@@ -856,10 +869,11 @@ function mount(container, opts) {
     let to;
     if (why === 'brain') {
       if (p.gate.id === 'D') to = V(HANGAR.x - 14, 0.6, HANGAR.z + 11);
+      else if (p.gate.id === 'S') to = V(97 + Math.random() * 2, QUAY.top + 0.24, -116);
       else { const ang = (p.gate.x < 0 ? Math.PI : 0) + (Math.random() - 0.5) * 2.2; to = V(TOWER.x + Math.cos(ang) * 4.6, 0.8, TOWER.z + Math.sin(ang) * 4.6); }
       ENV.brainPulse = 1;
     } else to = coffee.reduce((b, c) => c.distanceTo(p.home) < b.distanceTo(p.home) ? c : b).clone().add(V((Math.random() - 0.5) * 2, 0, -1.2));
-    p.mode = 'walking'; p.why = why; p.path = walkPath(p.g.position, to, why === 'brain' && p.gate.id !== 'D'); p.s = 0;
+    p.mode = 'walking'; p.why = why; p.path = walkPath(p.g.position, to, why === 'brain' && !['D', 'S'].includes(p.gate.id)); p.s = 0;
   }
   function updatePerson(p, dt) {
     const t = SIM.t + p.phase, a = p.agent, st = a.state || 'off';
@@ -895,7 +909,7 @@ function mount(container, opts) {
         p.g.rotation.y = Math.atan2(TOWER.x - p.g.position.x, TOWER.z - p.g.position.z);
         rx(p.armL, -0.3); rx(p.armR, -2.6 + Math.sin(t * 3) * 0.3); p.head.rotation.x = -0.45; p.bub.brain.visible = CAM.dist < 140;
       } else { rx(p.armR, -1.8); p.cup.visible = true; p.bub.coffee.visible = CAM.dist < 120; }
-      if (p.wait <= 0) { p.mode = 'return'; p.path = walkPath(p.g.position, p.home, p.why === 'brain' && p.gate.id !== 'D'); p.s = 0; p.head.rotation.x = 0; }
+      if (p.wait <= 0) { p.mode = 'return'; p.path = walkPath(p.g.position, p.home, p.why === 'brain' && !['D', 'S'].includes(p.gate.id)); p.s = 0; p.head.rotation.x = 0; }
     }
   }
 
@@ -1086,6 +1100,141 @@ function mount(container, opts) {
     fleetObjs.push({ f, g });
   });
 
+  /* ================================================== THE COAST
+     The Med sits north of the runway: beach, sea, a quay with the port
+     office (ship team) and the rescue vessel alongside. Launches bring the
+     ship team's work in from sea. */
+  const QUAY = { x0: 38, x1: 124, z0: COAST_Z - 0, z1: -119, top: 0.6 };
+  const SHIP_POS = { x: 72, z: -121.9 };
+  const PORT = { x0: 102, x1: 120, z0: -101.5, z1: -115 };
+  let seaMat, foam, shipObj = null, lighthouseBeam;
+  const seaGlows = [];
+  {
+    // sea normal map: tiling sine ripples turned into normals
+    const N = 256, c = document.createElement('canvas'); c.width = c.height = N; const x = c.getContext('2d'); const img = x.createImageData(N, N);
+    const H = (i, j) => { const u = i / N * Math.PI * 2, v = j / N * Math.PI * 2; return Math.sin(u * 3 + v * 2) * 0.5 + Math.sin(u * 7 - v * 5 + 1.3) * 0.25 + Math.sin(u * 13 + v * 11 + 2.1) * 0.12 + Math.cos(v * 9 - u * 2) * 0.2; };
+    for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+      const dx = H((i + 1) % N, j) - H((i + N - 1) % N, j), dy = H(i, (j + 1) % N) - H(i, (j + N - 1) % N);
+      const nx = -dx * 2.2, ny = -dy * 2.2, nz = 1, l = Math.hypot(nx, ny, nz), k = (j * N + i) * 4;
+      img.data[k] = (nx / l * 0.5 + 0.5) * 255; img.data[k + 1] = (ny / l * 0.5 + 0.5) * 255; img.data[k + 2] = (nz / l * 0.5 + 0.5) * 255; img.data[k + 3] = 255;
+    }
+    x.putImageData(img, 0, 0);
+    const nt = new T.CanvasTexture(c); nt.wrapS = nt.wrapT = T.RepeatWrapping; nt.repeat.set(1600 / 26, 900 / 26);
+    seaMat = new T.MeshStandardMaterial({ color: 0x2a5f7a, roughness: 0.2, metalness: 0.08, normalMap: nt, normalScale: new T.Vector2(0.55, 0.55) });
+    const sea = new T.Mesh(new T.PlaneGeometry(1600, 900), seaMat); sea.rotation.x = -Math.PI / 2; sea.position.set(0, SEA_Y, COAST_Z - 450); sea.receiveShadow = true; world.add(sea);
+    // beach and surf
+    const st = TEX.sand.clone(); st.needsUpdate = true; st.repeat.set(1400 / 30, 12 / 30);
+    const beach = new T.Mesh(new T.PlaneGeometry(1400, 12), new T.MeshStandardMaterial({ map: st, roughness: 0.95 })); beach.rotation.x = -Math.PI / 2; beach.position.set(0, 0.0, COAST_Z - 2); beach.receiveShadow = true; world.add(beach);
+    foam = new T.Mesh(new T.PlaneGeometry(1400, 2.4), new T.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.5, depthWrite: false })); foam.rotation.x = -Math.PI / 2; foam.position.set(0, SEA_Y + 0.06, COAST_Z - 8.6); world.add(foam);
+    // the quay and its fenders, bollards and lamps
+    world.add(box(QUAY.x1 - QUAY.x0, 2.4, QUAY.z0 - QUAY.z1 + 4, 0xcfcac1, (QUAY.x0 + QUAY.x1) / 2, QUAY.top - 1.2, (QUAY.z0 + QUAY.z1) / 2 + 2));
+    surface(TEX.concrete, QUAY.x1 - QUAY.x0, QUAY.z0 - QUAY.z1 + 4, (QUAY.x0 + QUAY.x1) / 2, QUAY.top + 0.01, (QUAY.z0 + QUAY.z1) / 2 + 2, 30, 30, 0, false);
+    world.add(flat(QUAY.x1 - QUAY.x0, 0.35, 0xf2c14e, (QUAY.x0 + QUAY.x1) / 2, QUAY.top + 0.06, QUAY.z1 + 1.2));
+    for (let xx = QUAY.x0 + 3; xx < QUAY.x1; xx += 6) { world.add(cyl(0.28, 0.34, 0.6, 0x3a3f46, xx, QUAY.top + 0.3, QUAY.z1 + 0.6, 10)); world.add(box(1.6, 1.4, 0.5, 0x2d2f33, xx + 3, QUAY.top - 0.9, QUAY.z1 - 0.2)); }
+    [46, 96, 122].forEach(xx => { world.add(cyl(0.18, 0.24, 9, P.steel, xx, QUAY.top + 4.5, QUAY.z1 + 2.2, 8)); const gl = glow(0xffe6b0, 8, 0); gl.position.set(xx, QUAY.top + 9, QUAY.z1 + 2.2); world.add(gl); floodGlows.push(gl); lightPool(22, 18, 0xffd9a0, xx, QUAY.z1 + 5, QUAY.top + 0.08); });
+    // port crane over the ship
+    const cr = new T.Group(); cr.position.set(90, QUAY.top, -108);
+    cr.add(box(2.4, 1.2, 2.4, 0x3e6a93, 0, 0.6, 0)); cr.add(cyl(0.5, 0.6, 9, 0xe3a23b, 0, 5.4, 0, 10)); cr.add(box(2.2, 2.0, 2.4, 0xe3a23b, 0, 10.6, 0));
+    const jib = box(1.0, 0.8, 16, 0xe3a23b, 0, 11.4, -7); jib.rotation.x = 0.12; cr.add(jib); cr.add(cyl(0.05, 0.05, 6, 0x2a2e34, 0, 8.4, -14.2, 4));
+    world.add(cr);
+    // supplies: pallets and containers waiting for the ship
+    [[60, -104, 0xa8875a], [64, -104, 0x3e6a93], [60, -108.5, 0x8a6a4c], [44, -104, 0x4e7d66], [48, -104, 0xd9782d]].forEach(([xx, zz, c]) => world.add(box(3.6, 2.4, 4.2, c, xx, QUAY.top + 1.2, zz)));
+    for (let i = 0; i < 6; i++) world.add(box(1.2, 0.8, 1.2, 0xc9b38a, 70 + (i % 3) * 1.5, QUAY.top + 0.4, -104 - Math.floor(i / 3) * 1.5));
+    // the road from landside round the runway end to the quay
+    surface(TEX.road, 132, 8, 160, 0.05, (32 + QUAY.z0) / 2 - 4, 32, 8, Math.PI / 2, false);
+    surface(TEX.road, 40, 8, 142, 0.06, QUAY.z0 - 4, 32, 8, 0, false);
+    // lighthouse, buoys and a few yachts
+    const lh = new T.Group(); lh.position.set(168, 0, -150);
+    lh.add(cyl(5, 6, 3, 0x8d877d, 0, -0.5, 0, 9)); lh.add(cyl(1.2, 1.7, 13, 0xf4f1ea, 0, 7.5, 0, 16));
+    [5, 9].forEach(y => lh.add(cyl(1.5 - y * 0.02, 1.6 - y * 0.02, 1.4, 0xb8442e, 0, y, 0, 16)));
+    lh.add(cyl(1.4, 1.4, 0.4, 0x2a2e34, 0, 14.2, 0, 16));
+    const lampM = new T.MeshBasicMaterial({ color: 0xfff2c8 }); lh.add(mesh(new T.CylinderGeometry(0.9, 0.9, 1.4, 12), lampM, 0, 15.1, 0, false, false)); lampMats.push(lampM);
+    lh.add(cyl(1.2, 0.2, 1.2, 0xb8442e, 0, 16.4, 0, 12)); world.add(lh);
+    lighthouseBeam = new T.Mesh(new T.PlaneGeometry(90, 6), new T.MeshBasicMaterial({ map: GLOW, color: 0xfff1c8, transparent: true, opacity: 0, depthWrite: false, blending: T.AdditiveBlending, side: T.DoubleSide }));
+    lighthouseBeam.geometry.translate(45, 0, 0); lighthouseBeam.position.set(168, 15.1, -150); world.add(lighthouseBeam);
+    [[150, -190, 0x34a35a], [126, -190, 0xc0392b], [158, -240, 0x34a35a], [118, -240, 0xc0392b]].forEach(([bx, bz, c]) => {
+      const b = new T.Group(); b.position.set(bx, SEA_Y, bz); b.add(cyl(0.6, 0.9, 1.4, c, 0, 0.5, 0, 10)); b.add(cyl(0.08, 0.08, 1.6, 0x2a2e34, 0, 2, 0, 6));
+      const gl = glow(c, 3, 0); gl.position.y = 2.9; b.add(gl); seaGlows.push({ gl, ph: bx * 0.1 }); b.userData.bob = bx; world.add(b); seaGlows.push({ buoy: b });
+    });
+  }
+  /* ---------- port office: the ship team's desks ---------- */
+  {
+    const g = new T.Group(); const w = PORT.x1 - PORT.x0, d = PORT.z0 - PORT.z1, cx = (PORT.x0 + PORT.x1) / 2, cz = (PORT.z0 + PORT.z1) / 2;
+    const ft = TEX.floor.clone(); ft.needsUpdate = true; ft.repeat.set(w / 12, d / 12);
+    const fl = new T.Mesh(new T.PlaneGeometry(w, d), new T.MeshStandardMaterial({ map: ft, roughness: 0.5 })); fl.rotation.x = -Math.PI / 2; fl.position.set(cx, QUAY.top + 0.05, cz); fl.receiveShadow = true; g.add(fl);
+    const rug = new T.Mesh(new T.PlaneGeometry(w - 3, d - 4), new T.MeshStandardMaterial({ color: new T.Color(0xf1ece3).lerp(new T.Color(0x2f6e8e), 0.18), roughness: 0.95 })); rug.rotation.x = -Math.PI / 2; rug.position.set(cx, QUAY.top + 0.07, cz + 0.5); g.add(rug);
+    g.add(box(w, 3.8, 0.5, P.terminal, cx, QUAY.top + 1.9, PORT.z0));
+    [PORT.x0, PORT.x1].forEach(xx => g.add(box(0.5, 3.8, d, P.terminal, xx, QUAY.top + 1.9, cz)));
+    g.add(mesh(new T.BoxGeometry(w, 3.2, 0.2), new T.MeshStandardMaterial({ color: P.glass, transparent: true, opacity: 0.28, roughness: 0.1 }), cx, QUAY.top + 1.9, PORT.z1, false, false));
+    for (let xx = PORT.x0; xx <= PORT.x1 + 0.01; xx += 4.5) g.add(box(0.3, 3.8, 0.3, P.steel, xx, QUAY.top + 1.9, PORT.z1));
+    g.add(box(w + 1, 0.4, 0.8, P.roof, cx, QUAY.top + 4, PORT.z1)); g.add(box(w + 1, 0.4, 0.8, P.roof, cx, QUAY.top + 4, PORT.z0));
+    for (let xx = PORT.x0 + 4.5; xx < PORT.x1; xx += 4.5) g.add(box(0.4, 0.35, d, P.roof, xx, QUAY.top + 4.1, cz));
+    g.add(box(w, 0.4, 0.55, 0x2f6e8e, cx, QUAY.top + 3.6, PORT.z0 - 0.02));
+    world.add(g);
+    const sg = signSprite('S', L.teams.ship, '#2F6E8E', 13); sg.position.set(cx, QUAY.top + 8.5, PORT.z0); world.add(sg);
+    pickable(g, { kind: 'team', id: 'ship' });
+  }
+  /* ---------- the rescue vessel (66 m, 15 m beam, drawn to the fleet sheet) ---------- */
+  const SHIP = Object.assign({ name: 'Rescue vessel', label: 'Rescue vessel', loa: 66, beam: 15.03 }, opts.ship || {});
+  const rescueTex = () => decalTex('rescue', 1024, 160, (x, w, h) => { x.font = `700 104px ${BRAND_FONT}`; x.fillStyle = '#c8602a'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.fillText((SHIP.slogan || 'RESCUE  ZONE').split('').join(' '), w / 2, h / 2 + 6); });
+  const crossTex = () => decalTex('cross', 64, 64, (x) => { x.fillStyle = '#2b2f36'; x.fillRect(26, 10, 12, 44); x.fillRect(10, 26, 44, 12); });
+  function makeRescueShip() {
+    const g = new T.Group(); const Lh = SHIP.loa * 0.335, B = SHIP.beam * 0.335, hb = B / 2;
+    const white = mat(0xf4f4f1, { roughness: 0.45 }), red = mat(0x8e3b2a, { roughness: 0.7 }), grey = mat(0xb9bfc6), dark = mat(0x1b222b, { roughness: 0.3, metalness: 0.3 }), deck = mat(0xc9ccce);
+    // hull in plan view, bow to -x
+    const plan = (inset) => { const sh = new T.Shape(); const h2 = hb - inset; sh.moveTo(Lh / 2 - inset, -h2 + 0.6); sh.quadraticCurveTo(Lh / 2 - inset, -h2, Lh / 2 - 0.6 - inset, -h2); sh.lineTo(-Lh * 0.18, -h2); sh.bezierCurveTo(-Lh * 0.36, -h2, -Lh * 0.47 + inset, -h2 * 0.45, -Lh / 2 + inset, 0); sh.bezierCurveTo(-Lh * 0.47 + inset, h2 * 0.45, -Lh * 0.36, h2, -Lh * 0.18, h2); sh.lineTo(Lh / 2 - 0.6 - inset, h2); sh.quadraticCurveTo(Lh / 2 - inset, h2, Lh / 2 - inset, h2 - 0.6); sh.closePath(); return sh; };
+    const ext = (sh, d, m, y) => { const ge = new T.ExtrudeGeometry(sh, { depth: d, bevelEnabled: false, curveSegments: 16 }); ge.rotateX(-Math.PI / 2); const o = new T.Mesh(ge, m); o.position.y = y; o.castShadow = true; o.receiveShadow = true; g.add(o); return o; };
+    ext(plan(0.25), 0.8, red, -0.8);                 // boot top below the waterline
+    ext(plan(0), 2.5, white, 0.0);                    // hull
+    ext(plan(0.05), 0.12, deck, 2.5);                 // main deck
+    const fc = new T.Shape(); fc.moveTo(-Lh * 0.12, -hb + 0.2); fc.lineTo(-Lh * 0.12, hb - 0.2); fc.bezierCurveTo(-Lh * 0.36, hb - 0.2, -Lh * 0.47, hb * 0.4, -Lh / 2 + 0.1, 0); fc.bezierCurveTo(-Lh * 0.47, -hb * 0.4, -Lh * 0.36, -hb + 0.2, -Lh * 0.12, -hb + 0.2);
+    ext(fc, 0.9, white, 2.5);                         // raised forecastle
+    for (const sz of [-1, 1]) { const bw = box(Lh * 0.7, 0.5, 0.12, white, Lh * 0.13, 2.85, sz * (hb - 0.06)); g.add(bw); }   // bulwark
+    // superstructure: accommodation, bridge deck, wheelhouse with wings, mast
+    const sx0 = -Lh * 0.2;
+    g.add(box(Lh * 0.36, 1.25, B * 0.84, white, sx0 + Lh * 0.12, 3.25, 0));
+    g.add(box(Lh * 0.26, 1.1, B * 0.74, white, sx0 + Lh * 0.12, 4.42, 0));
+    g.add(box(Lh * 0.17, 1.1, B * 0.7, white, sx0 + Lh * 0.1, 5.5, 0));
+    g.add(box(Lh * 0.05, 0.5, B * 1.06, white, sx0 + Lh * 0.05, 5.4, 0));        // bridge wings
+    const band = box(Lh * 0.172, 0.5, B * 0.71, dark, sx0 + Lh * 0.1, 5.62, 0); g.add(band);
+    const wins = new T.InstancedMesh(new T.BoxGeometry(0.42, 0.34, 0.06), dark, 28); const o3 = new T.Object3D(); let wi = 0;
+    for (const sz of [-1, 1]) for (let i = 0; i < 7; i++) { o3.position.set(sx0 + Lh * 0.0 + i * 0.95, 3.35, sz * B * 0.42); o3.updateMatrix(); wins.setMatrixAt(wi++, o3.matrix); o3.position.set(sx0 + Lh * 0.04 + i * 0.75, 4.5, sz * B * 0.371); o3.updateMatrix(); if (i < 7) wins.setMatrixAt(wi++, o3.matrix); }
+    wins.count = wi; g.add(wins);
+    g.add(box(Lh * 0.12, 0.08, B * 0.6, 0x1f2937, sx0 + Lh * 0.2, 3.92, 0));    // solar panels
+    const mx = sx0 + Lh * 0.1;
+    g.add(cyl(0.12, 0.16, 4.2, white, mx, 8.1, 0, 8)); g.add(box(0.12, 0.12, 2.4, white, mx, 7.4, 0)); g.add(box(0.12, 0.12, 1.4, white, mx, 8.8, 0));
+    [[mx, 10.3, 0, 0.32], [mx - 1.2, 6.7, 1.0, 0.36], [mx - 1.2, 6.7, -1.0, 0.36]].forEach(([a, b, c, r]) => g.add(mesh(new T.SphereGeometry(r, 14, 10), white, a, b, c)));
+    // aft working deck: crane and rescue boats
+    const cx = Lh * 0.12;
+    g.add(cyl(0.3, 0.36, 2.4, grey, cx, 3.8, -hb * 0.5, 10));
+    const arm = box(0.4, 0.4, 5.2, grey, cx + 1.2, 5.1, -hb * 0.5); arm.rotation.y = Math.PI / 2; arm.rotation.z = 0.35; g.add(arm);
+    const orange = mat(0xd25f2a, { roughness: 0.55 });
+    for (let i = 0; i < 2; i++) { const rb = new T.Mesh(new T.CapsuleGeometry(0.42, 2.6, 4, 10), orange); rb.rotation.z = Math.PI / 2; rb.position.set(Lh * 0.28 + i * 3.4, 3.0, hb * 0.35); g.add(rb); g.add(box(0.6, 0.5, 0.5, 0xe8e8e6, Lh * 0.28 + i * 3.4, 3.4, hb * 0.35)); }
+    const lb = new T.Mesh(new T.CapsuleGeometry(0.5, 2.6, 4, 10), orange); lb.rotation.z = Math.PI / 2; lb.position.set(sx0 + Lh * 0.02, 3.4, hb + 0.25); g.add(lb);
+    g.add(box(Lh * 0.2, 0.9, B * 0.5, 0xe1d8c9, Lh * 0.36, 3.0, -hb * 0.25));
+    // portholes, decals
+    const ph = new T.InstancedMesh(new T.CylinderGeometry(0.11, 0.11, 0.06, 10), dark, 20); let pi = 0;
+    for (const sz of [-1, 1]) for (let i = 0; i < 10; i++) { o3.position.set(-Lh * 0.1 + i * 0.95, 2.15, sz * (hb + 0.01)); o3.rotation.set(Math.PI / 2, 0, 0); o3.updateMatrix(); ph.setMatrixAt(pi++, o3.matrix); }
+    g.add(ph);
+    // decals on both hull sides (the hull's sides face ±z)
+    const ss = (make, xx, yy) => [-1, 1].forEach(sz => { const d = make(); d.position.set(xx, yy, sz * (hb + 0.03)); d.rotation.y = sz > 0 ? 0 : Math.PI; g.add(d); });
+    if (BRAND) { ss(() => decal(wordTex(), 4.6, 4.6 * 192 / 1024), -Lh * 0.2, 1.95); ss(() => decal(wordTex(), 2.8, 2.8 * 192 / 1024), Lh * 0.39, 1.75); }
+    ss(() => decal(rescueTex(), 6.4, 6.4 * 160 / 1024), Lh * 0.16, 1.25);
+    [-Lh * 0.15, -Lh * 0.03].forEach(xx => ss(() => decal(crossTex(), 0.4, 0.4), xx, 1.45));
+    // night lights
+    const lights = [glow(0xffffff, 1.6, 0), glow(0xff3b30, 1.2, 0), glow(0x34c759, 1.2, 0), glow(0xfff1c8, 6, 0), glow(0xfff1c8, 6, 0)];
+    lights[0].position.set(mx, 10.8, 0); lights[1].position.set(sx0 + Lh * 0.05, 5.7, -B * 0.53); lights[2].position.set(sx0 + Lh * 0.05, 5.7, B * 0.53);
+    lights[3].position.set(Lh * 0.3, 5, 0); lights[4].position.set(-Lh * 0.35, 4, 0);
+    lights.forEach(l => g.add(l)); g.userData.lights = lights;
+    const bridgeM = new T.MeshStandardMaterial({ color: 0x1b222b, emissive: 0xffc777, emissiveIntensity: 0, roughness: 0.3 }); band.material = bridgeM; windowMats.push(bridgeM);
+    return g;
+  }
+  {
+    const sh = makeRescueShip();
+    shipObj = new T.Group(); shipObj.add(sh); shipObj.position.set(SHIP_POS.x, SEA_Y, SHIP_POS.z); world.add(shipObj);
+    pickable(shipObj, { kind: 'vessel', id: 'vessel' });
+    const tg = signSprite('⚓', SHIP.name, '#2F6E8E', 10); tg.position.set(SHIP_POS.x, 15, SHIP_POS.z); world.add(tg);
+  }
   /* ---------- ground vehicles ---------- */
   function makeVehicle(kind) {
     const g = new T.Group(); const dark = mat(0x2a2f36); const parts = {};
@@ -1115,7 +1264,7 @@ function mount(container, opts) {
 
   /* ================================================== SIMULATION */
   const SIM = { t: 0, speed: 1, aircraft: [], vehicles: [], stands: {}, runway: null };
-  TEAMS.forEach(g => {
+  AIRPORT_GATES.forEach(g => {
     const st = SIM.stands[g.id] = { gate: g, x: g.x, ac: null, reserved: null };
     const depot = { cater: V(g.x + 3.2, 0, -8.6), tug: V(g.x + 6.2, 0, -8.6), bag: V(g.x + 9.2, 0, -8.6), fuel: V(g.x + 12.6, 0, -8.6) };
     ['tug', 'bag', 'fuel', 'cater'].forEach(k => {
@@ -1194,7 +1343,8 @@ function mount(container, opts) {
     ac.state = 'approach'; ac.s = 0; ac.g.visible = true; SIM.runway = ac; ac.item.status = 'Inbound';
     UI && UI.dirty();
   }
-  function setStep(ac, i) { ac.item.step = i; ac.item.stepAt[i] = clockStr(); ac.item.status = STEP_KEYS[i]; UI && UI.dirty(); }
+  const SHIP_KEYS = ['Moored', 'Read', 'Check', 'Book', 'File', 'Cast off'];
+  function setStep(ac, i) { ac.item.step = i; ac.item.stepAt[i] = clockStr(); ac.item.status = (ac.item.gate === 'S' ? SHIP_KEYS : STEP_KEYS)[i]; UI && UI.dirty(); }
   function gateAgents(gateId) { return people.filter(p => p.gate.id === gateId); }
   function turnaround(ac, dt) {
     const st = ac.stand, gid = st.gate.id; ac.timer += dt;
@@ -1313,6 +1463,61 @@ function mount(container, opts) {
     v.g.rotation.y = angLerp(v.g.rotation.y, Math.atan2(tan.x, tan.z), 1 - Math.exp(-dt * 8));
     if (!v.loop && u >= 1) { v.state = 'arrived'; if (v.endFace !== undefined) v.g.rotation.y = v.endFace; const cb = v.onArrive; v.onArrive = null; cb && cb(); if (v.state === 'arrived') v.state = 'working'; }
   }
+  /* ---------- launches: the ship team's work comes in from sea ---------- */
+  SIM.boats = [];
+  const BERTH = { x: 104, z: -121.4 };
+  function makeLaunch(item) {
+    const g = new T.Group();
+    const plan = (w, l) => { const sh = new T.Shape(); sh.moveTo(-w, l * 0.5); sh.lineTo(w, l * 0.5); sh.lineTo(w, -l * 0.2); sh.quadraticCurveTo(w, -l * 0.5, 0, -l * 0.5); sh.quadraticCurveTo(-w, -l * 0.5, -w, -l * 0.2); sh.closePath(); return sh; };
+    const hull = (w, l, d, m, y) => { const ge = new T.ExtrudeGeometry(plan(w, l), { depth: d, bevelEnabled: false }); ge.rotateX(-Math.PI / 2); const o = new T.Mesh(ge, m); o.position.y = y; o.castShadow = true; g.add(o); };
+    hull(0.62, 3.8, 0.35, mat(0x8e3b2a), -0.25); hull(0.65, 3.9, 0.55, mat(0xf4f4f1, { roughness: 0.45 }), 0.1); hull(0.66, 3.92, 0.12, mat(0xd25f2a), 0.5);
+    g.add(box(0.9, 0.62, 1.1, 0xf4f4f1, 0, 1.0, -0.15)); g.add(box(0.92, 0.2, 1.12, 0x1b222b, 0, 1.12, -0.15)); g.add(box(0.95, 0.06, 1.25, 0xd5d9de, 0, 1.33, -0.2));
+    g.add(cyl(0.03, 0.03, 0.9, 0xd5d9de, 0, 1.8, -0.5, 6));
+    sides(g, () => decal(regTex(item.id), 1.0, 0.19), 0.47, 1.0, -0.15);
+    const wake = new T.Mesh(new T.PlaneGeometry(2.2, 9), new T.MeshBasicMaterial({ map: GLOW, color: 0xffffff, transparent: true, opacity: 0, depthWrite: false }));
+    wake.rotation.x = -Math.PI / 2; wake.position.set(0, 0.05, -5.8); g.add(wake);
+    const red = glow(0xff3b30, 0.9, 0), green = glow(0x34c759, 0.9, 0), mast = glow(0xffffff, 1.0, 0);
+    red.position.set(-0.5, 1.2, 0.1); green.position.set(0.5, 1.2, 0.1); mast.position.set(0, 2.3, -0.5); g.add(red, green, mast);
+    g.visible = false; world.add(g);
+    pickable(g, { kind: 'flight', id: item.key });
+    return { item, g, wake, lights: [red, green, mast], state: 'queued', s: 0, speed: 0, heading: 0, timer: 0, phase: 0, stepAt: [] };
+  }
+  function updateBoat(b, dt) {
+    const g = b.g, t = SIM.t;
+    if (b.state === 'queued') {
+      if (!SIM.boats.some(o => o !== b && (o.state === 'inbound' || o.state === 'moored'))) {
+        b.path = roundedPath([[236, -470], [196, -262], [146, -164], [120, -132], [BERTH.x + 7, BERTH.z - 0.6], [BERTH.x, BERTH.z]], 12, SEA_Y);
+        b.state = 'inbound'; b.s = 0; b.speed = 10; g.visible = true; b.item.status = 'Inbound'; UI && UI.dirty();
+      } else return;
+    }
+    if (b.state === 'inbound' || b.state === 'outbound') {
+      const left = b.path._len - b.s;
+      const target = b.state === 'inbound' ? Math.max(1.2, Math.min(10, left * 0.35)) : Math.min(13, 2 + b.s * 0.3);
+      b.speed = lerp(b.speed, target, 1 - Math.exp(-dt * 1.2));
+      b.s = Math.min(b.path._len, b.s + b.speed * dt);
+      const u = b.s / b.path._len; g.position.copy(b.path.getPointAt(u));
+      const tan = b.path.getTangentAt(Math.min(u, 0.999)); b.heading = angLerp(b.heading, Math.atan2(tan.x, tan.z), 1 - Math.exp(-dt * 4));
+      if (u >= 1) {
+        if (b.state === 'inbound') { b.state = 'moored'; b.phase = 0; b.timer = 0; b.speed = 0; b.heading = -Math.PI / 2; setStep(b, 0); }
+        else { b.state = 'gone'; g.visible = false; b.item.status = 'Departed'; UI && UI.dirty(); }
+      }
+    } else if (b.state === 'moored') {
+      b.timer += dt; const durs = [3, 8, 8, 7, 6];
+      if (b.phase < 5 && b.timer > durs[b.phase]) {
+        b.phase++; b.timer = 0; setStep(b, b.phase);
+        if (b.phase === 2) { const crew = gateAgents('S').filter(p => p.agent.state === 'working'); if (crew.length) sendWalk(crew[Math.floor(Math.random() * crew.length)], 'brain'); }
+      } else if (b.phase === 5 && b.timer > 3) {
+        b.path = roundedPath([[BERTH.x, BERTH.z], [BERTH.x - 9, BERTH.z - 4], [BERTH.x - 6, -142], [142, -192], [252, -484]], 7, SEA_Y);
+        b.state = 'outbound'; b.s = 0; b.speed = 0.5; b.item.status = 'Outbound'; UI && UI.dirty();
+      }
+    }
+    g.rotation.set(Math.sin(t * 1.1 + b.s) * 0.025, b.heading, Math.sin(t * 0.9) * 0.04);
+    if (b.state !== 'gone') g.position.y = SEA_Y + Math.sin(t * 1.4 + g.position.x) * 0.06;
+    b.wake.material.opacity = clamp(b.speed / 10, 0, 1) * 0.45;
+    b.lights.forEach(l => l.material.opacity = ENV.night * 0.9);
+  }
+  function craft() { return SIM.aircraft.concat(SIM.boats); }
+
   function startSweep() {
     if (ENV.sweepK > 0.2) return;
     ENV.sweepK = 1; van.speed = 2;
@@ -1380,6 +1585,8 @@ function mount(container, opts) {
     skyU.sunCol.value.copy(sun.color); skyU.glowK.value = (1 - k * 0.85) * (ENV.weather === 'clear' ? 1 : 0.3);
     clouds.mat.color.setHex(0xffffff).lerp(c2.setHex(0x2c3550), k * 0.85); if (wx.tint) clouds.mat.color.lerp(c2.setHex(wx.tint), 0.5);
     hillMat.color.setHex(0x9db08f).lerp(c2.setHex(0x1c2433), k * 0.6);
+    seaMat.color.setHex(0x2a5f7a).lerp(c2.setHex(0x0a1626), k * 0.92); if (wx.tint) seaMat.color.lerp(c2.setHex(wx.tint).multiplyScalar(0.55), 0.35);
+    seaMat.normalScale.setScalar(ENV.weather === 'storm' ? 1.2 : ENV.weather === 'rain' ? 0.8 : 0.55);
     brainHalo.material.opacity = 0.3 + k * 0.2 + ENV.brainPulse * 0.4;
   }
 
@@ -1390,11 +1597,12 @@ function mount(container, opts) {
     gates: { t: [0, 2, -6], d: 100, az: -0.45, pol: 0.86 },
     brain: { t: [0, 43, 6], d: 70, az: -0.5, pol: 1.18 },
     workshop: { t: [HANGAR.x, 2, HANGAR.z], d: 74, az: -0.85, pol: 0.82 },
-    fleet: { t: [-112, 2, -28], d: 80, az: -1.1, pol: 0.9 },
+    fleet: { t: [-108, 2, -28], d: 84, az: -1.1, pol: 0.9 },
+    harbour: { t: [86, 3, -118], d: 96, az: -0.3, pol: 0.98 },
     runway: { t: [-10, 0, RWY_Z], d: 270, az: -0.22, pol: 1.0 },
     landside: { t: [0, 0, 28], d: 130, az: 0.55, pol: 0.95 }
   };
-  if (isPhone) { AREAS.overview.d = 470; CAM.dist = 470; AREAS.gates.d = 170; AREAS.brain.d = 95; }
+  if (isPhone) { AREAS.overview.d = 470; CAM.dist = 470; AREAS.gates.d = 170; AREAS.brain.d = 95; AREAS.harbour.d = 150; }
   function applyCam() {
     const t = CAM.target, d = CAM.dist;
     camera.position.set(t.x + d * Math.sin(CAM.pol) * Math.sin(CAM.az), t.y + d * Math.cos(CAM.pol), t.z + d * Math.sin(CAM.pol) * Math.cos(CAM.az));
@@ -1415,6 +1623,8 @@ function mount(container, opts) {
     () => { const a = SIM.aircraft.find(a => a.state === 'onBlock'); if (!a) return 0; flyTo(followPoint(a.g), isPhone ? 70 : 48, 0.7, 0.85, 2600, null); return 9; },
     () => { flyTo(V(HANGAR.x, 2, HANGAR.z + 2), isPhone ? 90 : 62, -1.0, 0.75, 2600, null); return 7; },
     () => { flyTo(V(-112, 2, -28), isPhone ? 100 : 70, -1.5, 0.95, 2600, null); return 7; },
+    () => { flyTo(V(SHIP_POS.x + 6, 4, SHIP_POS.z), isPhone ? 110 : 70, 0.35, 1.05, 2800, null); return 8; },
+    () => { const b = SIM.boats.find(b => b.state === 'inbound' || b.state === 'outbound'); if (!b) return 0; flyTo(followPoint(b.g), isPhone ? 60 : 40, -0.6, 1.0, 2600, b.g); return 8; },
     () => { flyTo(V(-40, 9, 14.4), isPhone ? 80 : 56, 0.15, 1.3, 2600, null); return 7; },
     () => { flyTo(V(-4, 6, -20), isPhone ? 470 : 300, -0.62, 0.9, 3000, null); return 8; }
   ];
@@ -1546,7 +1756,8 @@ function mount(container, opts) {
   let SEL = null;
   function objFor(info) {
     if (!info) return null;
-    if (info.kind === 'flight') { const a = SIM.aircraft.find(a => a.item.key === info.id); return a && a.g.visible ? a.g : null; }
+    if (info.kind === 'flight') { const a = craft().find(a => a.item.key === info.id); return a && a.g.visible ? a.g : null; }
+    if (info.kind === 'vessel') return shipObj;
     if (info.kind === 'agent') { const a = D.byId.get(info.id); return a && a._p ? a._p.g : null; }
     if (info.kind === 'vehicle') { const v = SIM.vehicles.find(v => v.id === info.id); return v ? v.g : null; }
     if (info.kind === 'fleet') { const f = fleetObjs.find(f => f.f.reg === info.id); return f ? f.g : null; }
@@ -1560,8 +1771,9 @@ function mount(container, opts) {
       if (b) flyTo(V(b.grp.position.x, 8, 14.4), isPhone ? 70 : 46, 0.0, 1.32, 900, null);
       selRing.visible = false; UI && UI.openTab(info.id); return;
     }
+    if (info.kind === 'vessel') { flyTo(V(SHIP_POS.x, 4, SHIP_POS.z), isPhone ? 95 : 58, CAM.az, 1.02, 900, null); selRing.visible = false; UI && UI.select(info); return; }
     if (info.kind === 'team') {
-      const g = teamOf(info.id); const x = g.id === 'D' ? HANGAR.x : g.x, z = g.id === 'D' ? HANGAR.z + 4 : 3.5;
+      const g = teamOf(info.id); const x = g.id === 'D' ? HANGAR.x : g.id === 'S' ? (PORT.x0 + PORT.x1) / 2 : g.x, z = g.id === 'D' ? HANGAR.z + 4 : g.id === 'S' ? -108 : 3.5;
       flyTo(V(x, 1, z), g.id === 'D' ? 62 : 46, CAM.az, 0.88, 900, null);
       selRing.visible = true; selRing.position.set(x, 0.75, z); selRing.scale.setScalar(g.id === 'D' ? 17 : 10);
     } else if (info.kind === 'brain' || info.kind === 'node') {
@@ -1571,7 +1783,7 @@ function mount(container, opts) {
     } else {
       const o = objFor(info);
       if (o) {
-        const d = (info.kind === 'flight' ? 62 : info.kind === 'fleet' ? 52 : info.kind === 'agent' ? 30 : 30) * (isPhone ? 1.5 : 1);
+        const d = (info.kind === 'flight' ? (SIM.boats.some(b => b.g === o) ? 34 : 62) : info.kind === 'fleet' ? 52 : info.kind === 'agent' ? 30 : 30) * (isPhone ? 1.5 : 1);
         flyTo(followPoint(o), d, CAM.az, info.kind === 'agent' ? 0.62 : 0.9, 900, info.kind === 'fleet' ? null : o);
         selRing.visible = true; selRing.scale.setScalar(info.kind === 'flight' ? 9 : info.kind === 'fleet' ? 13 : info.kind === 'agent' ? 1.6 : 3);
       }
@@ -1601,12 +1813,23 @@ function mount(container, opts) {
     const dt = rawDt * SIM.speed; SIM.t += dt;
     resize();
     // keep the field alive: replay recent work when nothing new arrives
-    D.items.forEach(it => { if (!it._ac && it.status === 'Queued') { it._ac = makeAircraft(it); SIM.aircraft.push(it._ac); } });
+    D.items.forEach(it => { if (!it._ac && it.status === 'Queued') { if (it.gate === 'S') { it._ac = makeLaunch(it); SIM.boats.push(it._ac); } else { it._ac = makeAircraft(it); SIM.aircraft.push(it._ac); } } });
     replayClock -= dt;
-    const active = SIM.aircraft.filter(a => a.state !== 'gone').length;
+    const active = craft().filter(a => a.state !== 'gone').length;
     if (replayClock <= 0) { replayClock = 18; if (active < 3) replayOne(); }
     trySpawn();
     SIM.aircraft.forEach(a => updateAircraft(a, dt));
+    SIM.boats.forEach(b => updateBoat(b, dt));
+    SIM.boats = SIM.boats.filter(b => {
+      if (b.state === 'gone' && !(SEL && SEL.id === b.item.key)) { world.remove(b.g); const i = pickables.indexOf(b.g); if (i >= 0) pickables.splice(i, 1); D.items = D.items.filter(x => x !== b.item); return false; }
+      return true;
+    });
+    // sea life: ripples, surf, buoys, the vessel riding at the quay, lighthouse sweep
+    seaMat.normalMap.offset.x += dt * 0.004; seaMat.normalMap.offset.y += dt * 0.0025;
+    foam.material.opacity = 0.3 + 0.25 * Math.sin(SIM.t * 0.8);
+    seaGlows.forEach(o => { if (o.gl) o.gl.material.opacity = ENV.night * (((SIM.t * 0.5 + o.ph) % 2) < 0.35 ? 1 : 0.12); if (o.buoy) { o.buoy.position.y = SEA_Y + Math.sin(SIM.t * 1.3 + o.buoy.userData.bob) * 0.14; o.buoy.rotation.z = Math.sin(SIM.t + o.buoy.userData.bob) * 0.08; } });
+    { const sh = shipObj.children[0]; sh.position.y = Math.sin(SIM.t * 0.6) * 0.07; sh.rotation.x = Math.sin(SIM.t * 0.45) * 0.01; sh.rotation.z = Math.sin(SIM.t * 0.33) * 0.004; sh.userData.lights.forEach(l => l.material.opacity = ENV.night * 0.9); }
+    lighthouseBeam.rotation.y = SIM.t * 0.6; lighthouseBeam.material.opacity = ENV.night * 0.35;
     SIM.aircraft = SIM.aircraft.filter(a => {
       if (a.state === 'gone' && !(SEL && SEL.id === a.item.key)) {
         world.remove(a.g); const i = pickables.indexOf(a.g); if (i >= 0) pickables.splice(i, 1);
@@ -1675,7 +1898,7 @@ function mount(container, opts) {
   }
 
   return {
-    flyArea, select, clearSel, objFor, AREAS, SIM, ENV, CAM, people, fleet: fleetObjs, setGraph, onAgents, startSweep, dispose, tour, TOUR, updateBoards,
+    flyArea, select, clearSel, objFor, AREAS, SIM, ENV, CAM, people, fleet: fleetObjs, setGraph, onAgents, startSweep, dispose, tour, TOUR, updateBoards, craft, ship: SHIP,
     brainInfo: () => ({ nodes: BR.centers.length, links: BR.edgeCount || 0, hot: BR.centers.filter(c => c.node.hot).length }),
     vanInfo: () => van,
     vehicleOf: id => SIM.vehicles.find(v => v.id === id),
@@ -1697,7 +1920,7 @@ function mount(container, opts) {
         <div class="oa-brand"><span class="oa-dot" aria-hidden="true"></span><strong>${esc(L.title)}</strong><span class="oa-mode" data-mode></span></div>
         <nav class="oa-areas" aria-label="Areas">
           <button type="button" class="oa-tour" data-tour aria-pressed="false">${icon('play')}${esc(L.tour)}</button>
-          ${['overview', 'gates', 'brain', 'workshop', 'fleet', 'runway'].map(a => `<button type="button" data-area="${a}">${esc(L[a])}</button>`).join('')}
+          ${['overview', 'gates', 'brain', 'workshop', 'fleet', 'harbour', 'runway'].map(a => `<button type="button" data-area="${a}">${esc(L[a])}</button>`).join('')}
         </nav>
         <div class="oa-tools">
           <label class="oa-search"><span class="oa-sr">${esc(L.search)}</span><input id="oa-search" type="search" placeholder="${esc(L.search)}" autocomplete="off"><ul class="oa-results oa-glass" hidden></ul></label>
@@ -1748,7 +1971,7 @@ function mount(container, opts) {
       if (!q) { results.hidden = true; return; }
       const hits = [];
       D.agents.forEach(a => { if ((a.name + ' ' + (a.role || '') + ' ' + a.id).toLowerCase().includes(q)) hits.push({ label: a.name, sub: txt(a, 'role'), info: { kind: 'agent', id: a.id } }); });
-      W.SIM.aircraft.forEach(ac => { if (ac.g.visible && (ac.item.id + ' ' + ac.item.what).toLowerCase().includes(q)) hits.push({ label: ac.item.id, sub: ac.item.what, info: { kind: 'flight', id: ac.item.key } }); });
+      W.craft().forEach(ac => { if (ac.g.visible && (ac.item.id + ' ' + ac.item.what).toLowerCase().includes(q)) hits.push({ label: ac.item.id, sub: ac.item.what, info: { kind: 'flight', id: ac.item.key } }); });
       W.fleet.forEach(f => { if ((f.f.reg + ' ' + (f.f.label || '')).toLowerCase().includes(q)) hits.push({ label: f.f.reg, sub: f.f.label || L.aircraft, info: { kind: 'fleet', id: f.f.reg } }); });
       if ('brain jarvis cerebro'.includes(q)) hits.push({ label: L.brainTitle, sub: '', info: { kind: 'brain', id: 'brain' } });
       results.innerHTML = hits.slice(0, 8).map((h, i) => `<li><button type="button" data-hit="${i}"><b>${esc(h.label)}</b><span>${esc(h.sub || '')}</span></button></li>`).join('') || `<li class="oa-empty">${esc(L.nothing)}</li>`;
@@ -1845,9 +2068,9 @@ function mount(container, opts) {
           ${a.last ? kv(L.last, `${esc(txt(a.last, 'what'))} <small>${esc(fmtDay(a.last.at))}</small>`) : ''}`;
       }
       if (info.kind === 'flight') {
-        const ac = W.SIM.aircraft.find(a => a.item.key === info.id); const it = ac ? ac.item : null; if (!it) return '';
+        const ac = W.craft().find(a => a.item.key === info.id); const it = ac ? ac.item : null; if (!it) return '';
         const g = gateById(it.gate), who = it.agent && D.byId.get(it.agent);
-        return `<p class="oa-eyebrow"><span class="oa-gate" style="--g:${g.color}">${g.id}</span>${esc(L.flight)}${it.replay ? ' · ' + esc(L.replay) : ''}</p>
+        return `<p class="oa-eyebrow"><span class="oa-gate" style="--g:${g.color}">${g.id}</span>${esc(it.gate === 'S' ? L.boat : L.flight)}${it.replay ? ' · ' + esc(L.replay) : ''}</p>
           <h3>${esc(it.id)}</h3><p class="oa-lead">${esc(it.what)}</p>
           <p class="oa-pill" data-s="working">${esc(L.st[it.status] || it.status)}</p>
           ${kv(L.from, who ? esc(who.name) : '')}${kv(L.at, esc(fmtDay(it.at)))}${kv(L.gate, esc(g.id + ' · ' + L.teams[g.team]))}
@@ -1869,6 +2092,12 @@ function mount(container, opts) {
         return `<p class="oa-eyebrow"><span class="oa-gate" style="--g:${g.color}">${g.id}</span>${esc(L.gate)}</p><h3>${esc(L.teams[g.team])}</h3><p class="oa-lead">${esc(L.teamWhat[g.team])}</p>
           <ul class="oa-mini">${list.map(a => `<li><button type="button" data-sel="agent:${esc(a.id)}"><span class="oa-st" data-s="${esc(a.state)}"></span>${esc(a.name)}<small>${esc(stateWord(a.state))}</small></button></li>`).join('')}</ul>`;
       }
+      if (info.kind === 'vessel') {
+        const v = W.ship, crew = D.agents.filter(a => a.team === 'ship');
+        return `<p class="oa-eyebrow"><span class="oa-gate" style="--g:#2F6E8E">S</span>${esc(L.vessel)}</p><h3>${esc(v.name)}</h3><p class="oa-lead">${esc(v.label)}</p>
+          ${kv(L.loa, v.loa ? esc(v.loa + ' m') : '')}${kv(L.beam, v.beam ? esc(v.beam + ' m') : '')}${kv(L.imo, esc(v.imo || ''))}
+          ${crew.length ? `<p class="oa-eyebrow" style="margin-top:12px">${esc(L.crew)}</p><ul class="oa-mini">${crew.map(a => `<li><button type="button" data-sel="agent:${esc(a.id)}"><span class="oa-st" data-s="${esc(a.state)}"></span>${esc(a.name)}<small>${esc(txt(a, 'task') || stateWord(a.state))}</small></button></li>`).join('')}</ul>` : ''}`;
+      }
       if (info.kind === 'fleet') {
         const f = W.fleet.find(f => f.f.reg === info.id); if (!f) return '';
         return `<p class="oa-eyebrow">${esc(L.fleet)}</p><h3>${esc(f.f.reg)}</h3><p class="oa-lead">${esc(f.f.label || (f.f.type === 'global' ? 'Global 8000' : 'B787-8'))}</p>${(f.f.notes || []).map(n => kv(n[0], esc(n[1]))).join('')}`;
@@ -1887,15 +2116,15 @@ function mount(container, opts) {
       if (!info) { panel.hidden = true; renderTrack(); return; }
       panel.hidden = false; $('.oa-detail-body').innerHTML = detailHtml(info);
       panel.querySelectorAll('[data-sel]').forEach(b => b.addEventListener('click', () => { const [k, id] = b.dataset.sel.split(':'); W.select({ kind: k, id }); }));
-      const ol = panel.querySelector('[data-open-link]'); if (ol) ol.addEventListener('click', () => { const ac = W.SIM.aircraft.find(a => a.item.key === info.id); if (ac && opts.onOpen) opts.onOpen(ac.item.link, ac.item); });
+      const ol = panel.querySelector('[data-open-link]'); if (ol) ol.addEventListener('click', () => { const ac = W.craft().find(a => a.item.key === info.id); if (ac && opts.onOpen) opts.onOpen(ac.item.link, ac.item); });
       const on = panel.querySelector('[data-open-node]'); if (on) on.addEventListener('click', () => { const n = info.node; if (n && opts.onOpen) opts.onOpen(n.link || null, n); });
       renderTrack();
     }
 
     /* ---------- turnaround tracker ---------- */
     function trackItem() {
-      if (selInfo && selInfo.kind === 'flight') { const ac = W.SIM.aircraft.find(a => a.item.key === selInfo.id); if (ac) return ac.item; }
-      const on = W.SIM.aircraft.filter(a => a.state === 'onBlock' || a.state === 'pushback').sort((a, b) => b.item.step - a.item.step);
+      if (selInfo && selInfo.kind === 'flight') { const ac = W.craft().find(a => a.item.key === selInfo.id); if (ac) return ac.item; }
+      const on = W.craft().filter(a => a.state === 'onBlock' || a.state === 'pushback' || a.state === 'moored').sort((a, b) => b.item.step - a.item.step);
       return on.length ? on[0].item : null;
     }
     function renderTrack() {
@@ -1904,7 +2133,7 @@ function mount(container, opts) {
       el.hidden = false;
       const g = gateById(it.gate);
       el.innerHTML = `<header><span class="oa-gate" style="--g:${g.color}">${g.id}</span><b>${esc(it.id)}</b><span class="oa-sub">${esc(it.what)}</span></header>
-        <ol>${L.steps.map((s, i) => `<li data-done="${it.step > i ? 1 : 0}" data-now="${it.step === i ? 1 : 0}"><i></i><span>${esc(s)}</span><time>${esc(it.stepAt[i] || '')}</time></li>`).join('')}</ol>`;
+        <ol>${(it.gate === 'S' ? L.stepsShip : L.steps).map((s, i) => `<li data-done="${it.step > i ? 1 : 0}" data-now="${it.step === i ? 1 : 0}"><i></i><span>${esc(s)}</span><time>${esc(it.stepAt[i] || '')}</time></li>`).join('')}</ol>`;
       el.onclick = () => W.select({ kind: 'flight', id: it.key });
     }
 
@@ -1914,10 +2143,11 @@ function mount(container, opts) {
         const a = D.byId.get(info.id); if (!a) return '';
         return `<b>${esc(a.name)}</b><span>${esc(txt(a, 'role'))}</span><span class="oa-pill" data-s="${esc(a.state)}">${esc(stateWord(a.state))}</span>${txt(a, 'task') ? `<em>${esc(txt(a, 'task'))}</em>` : ''}<small>${esc([a.model, a.effort].filter(Boolean).join(' · '))}${a.today ? ' · ' + (a.today.items || 0) + ' ' + esc(L.items) : ''}</small>${a.last ? `<small>${esc(L.last)}: ${esc(txt(a.last, 'what'))}</small>` : ''}`;
       }
-      if (info.kind === 'flight') { const ac = W.SIM.aircraft.find(a => a.item.key === info.id); if (!ac) return ''; return `<b>${esc(ac.item.id)}</b><span>${esc(ac.item.what)}</span><span class="oa-pill" data-s="working">${esc(L.st[ac.item.status] || ac.item.status)}</span>`; }
+      if (info.kind === 'flight') { const ac = W.craft().find(a => a.item.key === info.id); if (!ac) return ''; return `<b>${esc(ac.item.id)}</b><span>${esc(ac.item.what)}</span><span class="oa-pill" data-s="working">${esc(L.st[ac.item.status] || ac.item.status)}</span>`; }
       if (info.kind === 'node') { const n = info.node; return `<b>${esc(n.label)}</b><span>${esc([n.type, n.group, n.stage].filter(Boolean).join(' · '))}</span>${n.hot ? `<span class="oa-pill" data-s="working">${esc(L.hot)}</span>` : ''}`; }
       if (info.kind === 'brain') { const b = W.brainInfo(); return `<b>${esc(L.brainTitle)}</b><span>${b.nodes} ${esc(L.nodes)} · ${b.links} ${esc(L.links)}</span>`; }
       if (info.kind === 'team') return `<b>${esc(L.teams[info.id])}</b><span>${esc(L.teamWhat[info.id])}</span>`;
+      if (info.kind === 'vessel') return `<b>${esc(W.ship.name)}</b><span>${esc(W.ship.label)}</span>`;
       if (info.kind === 'board') { const n = ((D.room || {})[info.id] || []).length; return `<b>${esc(L[info.id])}</b><span>${n} · ${esc(L.open)}</span>`; }
       if (info.kind === 'fleet') { const f = W.fleet.find(f => f.f.reg === info.id); return f ? `<b>${esc(f.f.reg)}</b><span>${esc(f.f.label || '')}</span>` : ''; }
       if (info.kind === 'vehicle') { const v = W.vehicleOf(info.id); return v ? `<b>${esc(L.veh[v.vk])}</b><span>${esc(L.vehWhat[v.vk])}</span>` : ''; }
@@ -1973,10 +2203,10 @@ function mount(container, opts) {
 function injectCss() {
   if (cssInjected) return; cssInjected = true;
   const css = `
-.oa{--oa-fg:#1d1d1f;--oa-fg2:#6e6e73;--oa-line:rgba(60,60,67,.14);--oa-glass:rgba(255,255,255,.72);--oa-glass-strong:rgba(255,255,255,.9);--oa-accent:#e07b24;--oa-blue:#007aff;--oa-green:#34c759;--oa-orange:#ff9500;--oa-red:#ff3b30;--oa-grey:#8e8e93;--oa-shadow:0 8px 28px rgba(0,0,0,.10),0 1px 2px rgba(0,0,0,.06);
+.oa{--oa-fg:#1d1d1f;--oa-fg2:#6e6e73;--oa-line:rgba(60,60,67,.14);--oa-glass:rgba(250,250,248,.86);--oa-glass-strong:rgba(255,255,255,.9);--oa-accent:#e07b24;--oa-blue:#007aff;--oa-green:#34c759;--oa-orange:#ff9500;--oa-red:#ff3b30;--oa-grey:#8e8e93;--oa-shadow:0 8px 28px rgba(0,0,0,.10),0 1px 2px rgba(0,0,0,.06);
   position:relative;width:100%;height:100%;min-height:420px;overflow:hidden;border-radius:inherit;color:var(--oa-fg);background:#dfe8ee;
   font:13px/1.35 -apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",Arial,sans-serif;-webkit-font-smoothing:antialiased;outline:none;isolation:isolate}
-.oa[data-oa-theme=dark]{--oa-fg:#f5f5f7;--oa-fg2:#a1a1a6;--oa-line:rgba(255,255,255,.12);--oa-glass:rgba(28,28,30,.66);--oa-glass-strong:rgba(44,44,46,.92);--oa-accent:#ef8a3a;--oa-blue:#0a84ff;--oa-green:#30d158;--oa-orange:#ff9f0a;--oa-red:#ff453a;--oa-shadow:0 10px 30px rgba(0,0,0,.4);background:#101a2b}
+.oa[data-oa-theme=dark]{--oa-fg:#f5f5f7;--oa-fg2:#a1a1a6;--oa-line:rgba(255,255,255,.12);--oa-glass:rgba(28,28,30,.8);--oa-glass-strong:rgba(44,44,46,.92);--oa-accent:#ef8a3a;--oa-blue:#0a84ff;--oa-green:#30d158;--oa-orange:#ff9f0a;--oa-red:#ff453a;--oa-shadow:0 10px 30px rgba(0,0,0,.4);background:#101a2b}
 .oa:focus-visible{box-shadow:inset 0 0 0 2px var(--oa-blue)}
 .oa *{box-sizing:border-box}
 .oa [hidden]{display:none!important}
@@ -2028,7 +2258,8 @@ function injectCss() {
 .oa-kpi>b{font-size:26px;font-weight:650;letter-spacing:-.02em;font-variant-numeric:tabular-nums;line-height:1.15}
 .oa-kpi>b small{font-size:15px;color:var(--oa-fg2);font-weight:500}
 .oa-kpi>em{font-style:normal;color:var(--oa-fg2);font-size:12px}
-button.oa-kpi:hover{background:var(--oa-glass-strong)}
+.oa button.oa-kpi{background:var(--oa-glass)}
+.oa button.oa-kpi:hover{background:var(--oa-glass-strong)}
 .oa-rings{display:flex;gap:14px;margin-top:4px}
 .oa-ring{display:flex;align-items:center;gap:6px}
 .oa-ring div{display:flex;flex-direction:column;line-height:1.1}
