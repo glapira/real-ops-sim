@@ -2,7 +2,8 @@
 // (live when online, refreshed every 15 min). Crew reports close the loop. Reference only, not for navigation.
 import * as E from './engine.js';
 import * as D from './data.js';
-import { buildStyle, addImages, applyTheme } from './map-style.js';
+import { buildStyle, addImages, applyTheme, tokens } from './map-style.js';
+import * as Scene from './scene3d.js';   // 3D scene: turbulence volumes, onset curtain, route ribbon (hooks marked "3D scene")
 
 const $ = (s, el = document) => el.querySelector(s);
 const h = (tag, attrs = {}, ...kids) => {
@@ -48,6 +49,7 @@ async function boot() {
   window.AC = { map, S };   // for support: inspect state from the console
   await new Promise(r => map.on('load', r));
   addImages(map);
+  Scene.init(map, tokens);   // 3D scene
   map.getSource('airports').setData(airports);
   map.getSource('navaids').setData(navaids);
   map.getSource('crest').setData(crest);
@@ -66,8 +68,8 @@ async function boot() {
 }
 
 // ---------- camera ----------
-const HERO = { center: [-69.85, -32.95], pitch: 52, bearing: 8 };
-function heroZoom() { const w = map.getContainer().clientWidth; return w < 680 ? 6.0 : w < 1344 ? 6.5 : 6.8; }
+const HERO = { center: [-69.85, -32.95], pitch: 64, bearing: 28 };   // 3D scene: from the south-west, so the onset curtain shows its face and the crossing reads left to right
+function heroZoom() { const w = map.getContainer().clientWidth; return w < 680 ? 6.3 : w < 1344 ? 6.8 : 7.0; }
 function opening() {
   setTerrain(true);
   const x = S.plan?.crossings?.[0];
@@ -77,7 +79,8 @@ function opening() {
   setTimeout(() => map.flyTo({ ...cam, duration: 2800, curve: 1.42, essential: false }), 400);
 }
 function setTerrain(on) {
-  map.setTerrain(on ? { source: 'dem-terrain', exaggeration: 1.8 } : null);
+  map.setTerrain(on ? { source: 'dem-terrain', exaggeration: Scene.EXAGGERATION } : null);
+  Scene.setEnabled(on);   // 3D scene: volumes in the air when on, the flat bands when off
   $('#btn3d').setAttribute('aria-pressed', String(on));
   if (!on) map.easeTo({ pitch: 0, bearing: 0, duration: reduceMotion() ? 0 : 600 });
 }
@@ -122,6 +125,7 @@ function renderTurb() {
   // the route wears its risk: one feature per leg between samples, cat from the bands it passes through (DESIGN §3.2 item 14)
   const line = S.plan?.line || [], risk = r && line.length ? E.routeRisk(line, r.areas, band) : line.map(() => 0);
   map.getSource('route').setData({ type: 'FeatureCollection', features: line.slice(1).map((c, i) => ({ type: 'Feature', properties: { cat: Math.max(risk[i], risk[i + 1]) }, geometry: { type: 'LineString', coordinates: [line[i], c] } })) });
+  Scene.update({ result: r, band, fl: S.fl, plan: S.plan, risk });   // 3D scene
   map.getSource('crossing').setData({ type: 'FeatureCollection', features: (S.plan?.crossings || []).map(x => ({ type: 'Feature', properties: { label: 'Andes crest ' + Math.round(x.elev_m / 0.3048).toLocaleString() + ' ft' }, geometry: { type: 'Point', coordinates: x.at } })) });
   // WAFS onset contours for the selected level and time, when the scheduled job has put them on the server
   const st = S.wafs?.steps?.find(s => S.steps[S.step] && s.valid.slice(0, 13) === (S.steps[S.step].time + 'Z').slice(0, 13));
@@ -407,7 +411,7 @@ function wireUi() {
   document.querySelectorAll('#layersCard input[data-layer]').forEach(i => { i.checked = S.layers[i.dataset.layer]; i.onchange = () => { S.layers[i.dataset.layer] = i.checked; setLayers(); renderLegend(); }; });
   const themeSeg = $('#themeSeg');
   themeSeg.querySelectorAll('.k-seg-item').forEach(b => b.setAttribute('aria-checked', String(b.value === document.documentElement.getAttribute('data-theme'))));
-  segInit(themeSeg, v => { document.documentElement.setAttribute('data-theme', v); try { localStorage.setItem('solidaire.theme', v); } catch {} applyTheme(map, S.base); });
+  segInit(themeSeg, v => { document.documentElement.setAttribute('data-theme', v); try { localStorage.setItem('solidaire.theme', v); } catch {} applyTheme(map, S.base); Scene.retheme(); });   // 3D scene follows the theme
   $('#btnOffline').onclick = saveOffline;
   map.on('click', 'airport', e => airportPopup(e.features[0]));
   map.on('click', 'airport-label', e => airportPopup(e.features[0]));
@@ -426,6 +430,7 @@ function setLayers() {
   vis(['wafs-onset'], S.layers.wafs); vis(['sigmet-fill', 'sigmet-line', 'sigmet-label'], S.layers.sigmet);
   vis(['escape-casing', 'escape-line', 'escape-branch', 'escape-pt', 'escape-pt-label'], S.layers.escape);
   vis(['airway-casing', 'airway', 'airway-label'], S.layers.airways); vis(['navaid'], S.layers.navaids); vis(['crest'], S.layers.crest);
+  Scene.setLayers({ turb: S.layers.turb });   // 3D scene: after the flat layers, so it can hide the ones it replaces
 }
 function segInit(el, onChange) {
   const k = Kit(); if (k?.seg) { k.seg(el, { onChange: v => onChange && onChange(v) }); return; }
