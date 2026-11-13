@@ -4,6 +4,8 @@ Status: planning only, no code yet. Written 13 Nov 2026.
 
 This plan covers a small web app that estimates turbulence risk for a flight crossing the Andes. You enter a route (airports, waypoints, airways, cruise level, time). The app shows a risk picture along that route, with the cross-Andes pressure difference as one of its core inputs.
 
+The goal is a likelihood: the chance of light, moderate and severe turbulence at each point and level of your route, with a confidence label. The app gets there by combining the pressure difference, the weather models, ensembles, official warnings and, over time, your crews' own reports.
+
 The app is a pilot awareness tool. It does not replace SIGMETs, the operator's flight planning or the official forecast.
 
 ---
@@ -68,6 +70,29 @@ I could not confirm the exact airway designators across the range from public so
 
 ---
 
+## 1b. Extra research for the likelihood engine
+
+### How the professionals build a turbulence forecast
+
+NCAR's Graphical Turbulence Guidance (GTG) drives the WAFS, Turbli and most airline products. It computes many separate diagnostics from a weather model. Some cover clear-air turbulence (wind shear, deformation, Richardson number). Others cover mountain waves. GTG3 added 14 mountain-wave diagnostics. GTG turns each diagnostic into an EDR value with a simple fitted curve, log EDR = a + b log D, then blends them.
+
+For the mountain-wave part, GTG multiplies a normal turbulence diagnostic by terrain height and low-level wind speed. Research by Wolff and Sharman found that moderate-or-worse mountain-wave turbulence shows up mostly where terrain tops 1.5 km and where the low-level wind blows within 30° of perpendicular to the range. The Andes meet the first test along the whole route.
+
+### Thresholds we can use
+
+1. ICAO Annex 3 (Amendment 79, from November 2020): EDR 0.20 to 0.45 is moderate, 0.45 and above is severe. Those values hold for a medium transport aircraft. A light business jet feels the same EDR as rougher.
+2. Ellrod index (vertical shear times deformation): about 4 light to moderate, 8 moderate, 12 moderate to severe, in units of 10⁻⁷ s⁻². A recent study tuned the best cut-off for EDR moderate-or-greater at about 6.4. These thresholds shift between models, so we tune them ourselves.
+
+### Extra data we can add
+
+1. **Ensembles.** ECMWF and other centres run 30 to 50 slightly different versions of the same forecast. Open-Meteo serves ECMWF IFS and AIFS ensembles and the Canadian GEM ensemble. The share of members that show turbulence gives an honest probability.
+2. **Soundings.** Santo Domingo, Chile (WMO 85586) on the windward side and Mendoza (WMO 87418) on the lee side launch weather balloons. The University of Wyoming archive serves them. We can check the model against a real profile each morning.
+3. **Satellite.** GOES-East covers South America. Its water vapour channel often shows standing wave bands in the lee of a range. Studies in Colorado found turbulence more likely on days with those signatures, though not every wave day turned rough. It works best as a visual layer for the pilot, not as a score input.
+4. **International SIGMETs.** aviationweather.gov serves decoded international SIGMETs in JSON at `/api/data/isigmet`, free and without a key.
+5. **Shared airline EDR data.** IATA runs a programme (Turbulence Aware) where member airlines share automated EDR reports. Worth asking whether an operator can join, because those reports would be the best truth data for tuning.
+
+---
+
 ## 2. What the app does
 
 ### 2.1 Input
@@ -77,94 +102,148 @@ I could not confirm the exact airway designators across the range from public so
 3. Departure time (ETD), so the app picks the right forecast hour.
 4. Aircraft category (light, medium, heavy), because the same EDR feels worse in a light jet.
 
-### 2.2 Three layers of evidence
+### 2.2 Output: a likelihood, not a yes or no
 
-**Layer A, the pressure check (the Harrison layer).**
-For each crossing on the route, the app picks the station pair on each side of the range and reads QNH and temperature from the latest METARs. It also pulls forecast sea-level pressure from the model for ETD. It computes the QNH difference, the temperature difference and the cross-range wind at 500 hPa. Then it plots the point on an abacus chart with the trend from -6 h to +24 h.
+For each route segment and each flight level, the app gives three numbers:
 
-Starting station pairs (to confirm):
+1. Chance of light or worse turbulence
+2. Chance of moderate or worse (MOG)
+3. Chance of severe
 
-1. SCEL Santiago / SAME Mendoza (central crossing, the classic one)
-2. SCEL Santiago / SACO Córdoba (longer central crossing)
-3. SCFA Antofagasta / SASA Salta (northern crossing)
-4. SCIE Concepción or SCTC Temuco / SAZN Neuquén
-5. SCTE Puerto Montt / SAZS Bariloche (Patagonian crossing)
+It also gives a confidence label (high, medium, low) based on how much the models agree, and it names the main cause: mountain wave, jet stream shear, convection, or low-level rotor.
 
-**Layer B, the model profile along the route.**
-The app samples the weather model every 10 to 20 NM along the route, at pressure levels from 850 to 150 hPa. For each point it computes:
-
-1. Wind component across the range
-2. Crest-level wind and the 1.6 rule
-3. Stability (Brunt–Väisälä frequency) and Froude number
-4. Scorer parameter profile
-5. Vertical wind shear and Richardson number (clear-air turbulence)
-6. Jet core position and tropopause height
-7. A simple CAT index such as Ellrod TI
-
-These combine into a risk score per point and level: nil, light, moderate, severe.
-
-**Layer C, official warnings.**
-Active SIGMETs for the FIRs the route crosses, drawn on the map and the cross-section. If we get WAFS access later, the WAFS EDR grid goes here too.
-
-### 2.3 Output
-
-1. **Cross-section.** Distance along route on the x-axis, altitude on the y-axis. Terrain profile underneath, risk colours above, your planned level as a line. This is the main picture.
-2. **Map.** The route over a terrain map, each leg coloured by the worst risk at your level. SIGMET areas on top.
-3. **Abacus chart.** The SCEL–SAME point (or the pair for your crossing) on the abacus, with its trend over the next 24 h.
-4. **Summary card.** Overall risk for the crossing, the worst segment, the best level band, the time window that looks calmer, and the raw numbers (QNH difference, temperature difference, 500 hPa cross-range wind).
-
-Every screen shows the data time and source, so a pilot knows how fresh it is.
+The headline for the crossing reads like this: "SCEL to SAME at FL350, 14 Nov 18Z: 45% chance of moderate or worse, mainly mountain wave over the crest. FL390 drops to 20%. Confidence medium."
 
 ---
 
-## 3. Data sources
+## 3. The likelihood engine
+
+The engine works in four steps. Each step uses data from section 3.1.
+
+### 3.1 Every input it uses
+
+| Group | Inputs | Where from |
+|---|---|---|
+| Surface pressure pair | QNH and temperature difference across the range, observed now and forecast for ETD | METARs, model sea-level pressure |
+| Cross-range wind | Wind component perpendicular to the range at 700, 600, 500, 300, 250, 200 hPa. Crest-level wind. Angle to the ridge (within 30° counts) | Model, pressure levels |
+| Stability | Brunt–Väisälä frequency, Froude number, Scorer parameter profile, the 1.6 rule, inversions near crest height | Model temperature and height by level |
+| Wave strength | Model vertical velocity over and downwind of the crest, GTG-style terrain × low-level wind multiplier | Model plus terrain |
+| Clear-air turbulence | Vertical wind shear (kt per 1,000 ft), Richardson number, Ellrod index, horizontal shear, jet core speed and distance, tropopause height against your level | Model |
+| Convection | CAPE and lifted index along the route (summer storms over the range) | Model |
+| Official warnings | Active SEV TURB and SEV MTW SIGMETs | aviationweather.gov isigmet |
+| Checks | Morning soundings at Santo Domingo and Mendoza, satellite water vapour image | Wyoming archive, GOES-East |
+
+### 3.2 Step 1: physics score per point
+
+The engine samples the model every 10 NM along the route and at each flight level. For each point it computes every diagnostic above. Then it converts each one into an EDR estimate with the GTG-style curve. To start, we take the curve values from the published research and the Harrison Abacus. Later, our own data tunes them.
+
+Mountain-wave diagnostics only count when the point sits over or downwind of high terrain and the wind crosses the range within 30° of perpendicular. Clear-air diagnostics count everywhere.
+
+The pressure-pair check enters as its own diagnostic. It moves the whole crossing up or down, and the app also shows it on the abacus, because pilots know that chart.
+
+### 3.3 Step 2: probability from the ensemble
+
+The engine runs step 1 on each ensemble member, 30 to 50 forecasts. If 18 of 40 members show EDR above 0.20 at FL350 over the crest, the raw chance of moderate or worse there is 45%. The spread between members also sets the confidence label.
+
+We run the deterministic GFS and ECMWF on top for detail, because the ensembles run at coarser resolution.
+
+### 3.4 Step 3: overrides and floors
+
+1. An active SEV TURB or SEV MTW SIGMET on the route sets a floor: the app shows at least "severe possible" in that area, whatever the model says.
+2. If observed QNH difference right now is far above what the model forecast, the engine raises the mountain-wave score. The METAR beats the model for the next few hours.
+3. If the morning sounding shows a stronger crest wind than the model, the same rule applies.
+
+### 3.5 Step 4: calibration with real flights
+
+Raw ensemble probabilities run too high or too low until you tune them. The app keeps a log of what crews felt (date, time, position, level, intensity, aircraft). Every few weeks the engine compares its forecasts with those reports and adjusts the curves (logistic or isotonic calibration).
+
+Once we have a few hundred labelled crossings, we can train a Random Forest the way the 2022 study did, using historical model data (ERA5 or Open-Meteo's historical forecasts) as inputs. The study got its best results that way.
+
+### 3.6 Proving it works
+
+1. **Backtest.** Before anyone relies on it, run the engine on past dates with known events: the Aerolíneas Argentinas injuries in September 2019, Avianca near Salta in June 2016, and big Zonda days with 25 to 30 hPa differences. Check that it lights up.
+2. **Quiet days.** Run it on calm days too, so we know how often it cries wolf.
+3. **Side by side.** For one season, show the app's forecast next to Turbli and the WAFS turbulence chart, and log which one matched the flight.
+4. **Score.** Track the same skill score the study used (true skill statistic). The abacus alone scored under 0.25. The target is 0.5 or better.
+
+---
+
+## 4. Screens
+
+1. **Cross-section.** Distance along route on the x-axis, altitude on the y-axis. Terrain underneath, probability of moderate or worse as colour above, your planned level as a line.
+2. **Map.** The route over terrain, each leg coloured by risk at your level, SIGMET areas and the satellite water vapour image as optional layers.
+3. **Abacus.** The pressure-pair point on the Harrison Abacus with its trend from -6 h to +24 h.
+4. **Best level and time.** A small grid of levels against departure times, so you can see that FL390 or leaving two hours later looks calmer.
+5. **Why.** The main drivers for the worst segment, in plain words: "Crest wind 55 kt at 500 hPa, stable layer at 5 km, jet 140 kt 60 NM south."
+6. **Report.** A form for crews to log what they felt after the flight.
+
+Every screen shows the data time and the source, so a pilot knows how fresh it is.
+
+---
+
+## 5. Data sources
 
 | Need | Source | Cost and access | Notes |
 |---|---|---|---|
 | METAR QNH and temperature | aviationweather.gov Data API | Free, no key | Need to confirm SCEL and SAME return data |
-| Model winds, temperature, heights by level | Open-Meteo (GFS, ECMWF) | Free for non-commercial use, no key | Commercial use needs a paid plan |
-| SIGMETs | aviationweather.gov international SIGMET feed | Free | Confirm coverage of Chilean and Argentine FIRs |
-| Terrain profile | Open-Meteo elevation or SRTM tiles | Free | 90 m SRTM is plenty |
-| Airways and waypoints | Chile and Argentina AIP ENR 3 | Free to read, manual entry | Store as YAML in the repo |
-| WAFS EDR turbulence | WIFS or SADIS | Account required | Phase 3, optional |
+| International SIGMETs | aviationweather.gov `/api/data/isigmet` | Free, no key | Confirm Chilean and Argentine FIR coverage |
+| Model winds, temperature, heights, vertical velocity by level | Open-Meteo (GFS, ECMWF) | Free for non-commercial use, no key | Commercial use needs a paid plan |
+| Ensembles | Open-Meteo ensemble API (ECMWF IFS and AIFS, GEM) | Same as above | Confirm which pressure levels each ensemble serves |
+| Historical model data for backtests and training | Open-Meteo historical forecast API, ERA5 | Free | |
+| Soundings | University of Wyoming archive | Free | Stations 85586 and 87418 |
+| Satellite | GOES-East water vapour | Free | Visual layer |
+| Terrain profile | SRTM tiles or Open-Meteo elevation | Free | |
+| Airways and waypoints | Chile and Argentina AIP ENR 3 | Free to read, manual entry | Store as YAML |
+| WAFS EDR turbulence | WIFS or SADIS | Account required | Benchmark and extra layer |
+| Shared airline EDR reports | IATA Turbulence Aware | Membership | Best truth data if reachable |
 
-Navigation data is the awkward part. Commercial nav databases (Navigraph and similar) need a licence. For the Andes we only need a few dozen airways and waypoints, so a hand-built YAML file from the AIP is the practical path. It matches how this repo already stores data.
+Navigation data is the awkward part. Commercial nav databases need a licence. For the Andes we only need a few dozen airways and waypoints, so a hand-built YAML file from the AIP works.
+
+### Station pairs for the pressure check (to confirm)
+
+1. SCEL Santiago / SAME Mendoza (the classic central crossing)
+2. SCEL Santiago / SACO Córdoba
+3. SCFA Antofagasta / SASA Salta (northern crossing)
+4. SCIE Concepción or SCTC Temuco / SAZN Neuquén
+5. SCTE Puerto Montt / SAZS Bariloche (Patagonia)
 
 ---
 
-## 4. Architecture
+## 6. Architecture
 
-1. **Front end.** A single-page app in TypeScript. MapLibre GL for the map. A charting library (D3 or Plotly) for the cross-section and the abacus.
-2. **Back end.** A small API on your server (Node or Python FastAPI). It fetches METARs, SIGMETs and model data, caches them for 15 to 30 minutes, and does the route maths. This avoids browser CORS problems and keeps the free APIs happy.
-3. **Data folder.** Station pairs, abacus zones, Andes airways and waypoints, all as YAML.
-4. **Hosting.** Open access for now, as you said. Add a login later when it connects to the Ledger.
+1. **Front end.** A single-page app in TypeScript. MapLibre GL for the map, D3 or Plotly for the cross-section and the abacus.
+2. **Back end.** Python (FastAPI). Python has the weather maths libraries we need (MetPy for stability and shear, xarray for model grids, scikit-learn for calibration and the Random Forest).
+3. **Scheduler.** A job pulls new model runs every 6 hours, METARs and SIGMETs every 15 to 30 minutes, and pre-computes the Andes grid. A route request then only reads the pre-computed grid, so answers come back in a second or two.
+4. **Storage.** SQLite or Postgres for the forecast cache, the crew reports and the backtest results.
+5. **Data folder.** Station pairs, abacus zones, thresholds, airways and waypoints, all in YAML.
+6. **Hosting.** Open access for now. Add a login when it connects to the Ledger.
 
 ---
 
-## 5. Phases
+## 7. Phases
 
 **Phase 0, verify (before code).**
-1. Get the original Harrison Abacus chart with its zone values. If your company or the DMC has a version, that is the best source.
+1. Get the original Harrison Abacus chart with its zone values.
 2. Test that aviationweather.gov returns SCEL and SAME METARs and Andes SIGMETs.
-3. Test Open-Meteo pressure-level data over 33°S.
+3. Test Open-Meteo pressure-level and ensemble data over 33°S.
 4. Pull the airway list from the Chile and Argentina AIPs.
-5. Confirm the current ICAO EDR thresholds.
+5. Confirm current Annex 3 EDR thresholds (Amendment 82 may change WAFS products).
 
-**Phase 1, the abacus screen (MVP).**
-SCEL–SAME only. Live METAR difference, model 500 hPa cross-range wind, abacus plot with the 24 h trend, and a plain summary. This alone is useful on day one.
+**Phase 1, the engine on one crossing.**
+SCEL–SAME only. All diagnostics, ensemble probabilities, the abacus, and the crew report form. Backtest on the known events.
 
-**Phase 2, route and cross-section.**
-Route parser, airway database, model sampling along the route, risk scoring, cross-section and map.
+**Phase 2, any route.**
+Route parser, airway database, cross-section, map, best-level grid.
 
-**Phase 3, official layers and more crossings.**
-SIGMET overlay, the other station pairs, WAFS EDR if we get access.
+**Phase 3, all crossings and extra layers.**
+Other station pairs, SIGMET overlay, soundings check, satellite layer, WAFS comparison if we get access.
 
-**Phase 4, learn from real flights.**
-A simple form where crews log what they felt (level, time, intensity). Over time this tunes the thresholds for your aircraft. This is also the natural link to the Ledger: flights and crew reports already live there.
+**Phase 4, calibration and learning.**
+Tune the curves from crew reports. Train the Random Forest once enough data exists. Connect to the Ledger.
 
 ---
 
-## 6. Open questions
+## 8. Open questions
 
 1. Where should this live? This repo says "flight-simulation use only" in its README and licence notes. A real-ops tool may belong in its own repo or inside the Ledger project.
 2. What runs on your server today (Node, Python, PHP, plain static hosting)?
@@ -172,10 +251,12 @@ A simple form where crews log what they felt (level, time, intensity). Over time
 4. Which crossings matter most beyond Santiago–Mendoza?
 5. Do you have the abacus chart your company uses, and any company thresholds?
 6. Commercial or not: Open-Meteo's free tier is non-commercial only.
+7. Can Solidaire or Comlux join IATA Turbulence Aware, or get WAFS access through WIFS or SADIS?
+8. Will your crews fill in a turbulence report after each Andes crossing? Calibration depends on it.
 
 ---
 
-## 7. Sources
+## 9. Sources
 
 1. Aviación Global, "Flying across the Andes. Mountain wave." https://www.aviacionglobal.com/miscellaneous/flying-across-the-andes-mountain-wave/
 2. Menegardo-Souza et al. (2022), "In-Flight Turbulence Forecast Model Based on Machine Learning for the Santiago (Chile)–Mendoza (Argentina) Air Route", Pure and Applied Geophysics. https://link.springer.com/article/10.1007/s00024-022-03053-5
@@ -196,5 +277,15 @@ A simple form where crews log what they felt (level, time, intensity). Over time
 17. Aeroinside, Avianca A332 near Salta, 4 Jun 2016. https://www.aeroinside.com/7665/avianca-a332-near-salta-on-jun-4th-2016-turbulence-injures-11
 18. Aeroinside, Aerolíneas Argentinas A332 over the Andes, 20 Sep 2019. https://www.aeroinside.com/13751/argentinas-a332-over-andes-on-sep-20th-2019-turbulence-injures-9
 19. Emol, route turbulence ranking, 3 Nov 2026. https://www.emol.com/noticias/Nacional/2026/11/03/1215974/ranking-rutas-aereas-turbulencias-santiago.html
+
+20. Sharman and Pearson (2017), GTG3 mountain-wave diagnostics, as summarised in Sharman's review "Aviation Turbulence: Dynamics, Forecasting, and Response to Climate Change". https://link.springer.com/article/10.1007/s00024-018-1822-0
+21. NOAA, "Improvement of Mountain-Wave Turbulence Forecasts in NOAA's Rapid Refresh". https://journals.ametsoc.org/downloadpdf/view/journals/wefo/34/3/waf-d-18-0187_1.pdf
+22. ICAO METP, revised EDR values, Amendment 79 to Annex 3. https://www.icao.int/airnavigation/METP/Seventh Meeting of the MOG/METPWGMOG_7_SN.35_Revised_EDR_values_Amd_79_vs_final_22mar2018.pdf
+23. OPSGROUP, "Who is Eddie and what does he have to do with turbulence". https://ops.group/blog/who-is-eddie-and-what-does-he-have-to-do-with-turbulence/
+24. Ellrod index (AWC definition and thresholds). https://en.wikipedia.org/wiki/Ellrod_index
+25. Open-Meteo ensemble API. https://open-meteo.com/en/docs/ensemble-api
+26. aviationweather.gov Data API OpenAPI spec (isigmet). https://aviationweather.gov/data/api/swagger.yaml
+27. University of Wyoming sounding archive, Chilean stations (LSST note). https://confluence.lsstcorp.org/display/SIM/Wyoming+web+site+with+archived+atmospheric+data
+28. CIMSS, mountain wave signatures on water vapour imagery. https://cimss.ssec.wisc.edu/satellite-blog/archives/2115
 
 Note: this session's network blocked direct downloads of these pages. The findings above come from search summaries and abstracts. The blog thresholds (8 to 12 hPa, 5 °C, 280° to 320°) are not confirmed by an official source yet.
