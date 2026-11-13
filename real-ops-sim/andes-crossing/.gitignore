@@ -1,0 +1,5 @@
+web/api/cache/
+web/api/store/
+# chart content from Jeppesen stays on the server, never in this public repository
+web/data/escape-routes.local.json
+web/data/wafs/

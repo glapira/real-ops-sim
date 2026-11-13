@@ -1,0 +1,4 @@
+{ "name": "Andes Crossing", "short_name": "Andes", "start_url": "./", "scope": "./", "display": "standalone",
+  "background_color": "#000000", "theme_color": "#000000",
+  "description": "Escape routes and turbulence likelihood for the Andes crossing. Reference only.",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }] }

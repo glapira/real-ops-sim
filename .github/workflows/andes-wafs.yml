@@ -1,0 +1,28 @@
+# Andes Crossing: fetch the free NOAA WAFS turbulence grids every 6 hours and upload the Andes overlays to the server.
+# Needs repository secrets FTP_SERVER, FTP_USERNAME, FTP_PASSWORD (and optional FTP_DIR, default andes/data/wafs).
+# Schedules run from the default branch only. Use "Run workflow" to test from this branch.
+name: andes-wafs
+on:
+  schedule:
+    - cron: '17 5,11,17,23 * * *'   # about 5 h after each WAFS run, when NOMADS has the files
+  workflow_dispatch: {}
+jobs:
+  wafs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:   # job-level so the upload step's "if" can see whether the secret exists
+      FTP_SERVER: ${{ secrets.FTP_SERVER }}
+      FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
+      FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+      FTP_DIR: ${{ secrets.FTP_DIR || 'andes/data/wafs' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: pip install eccodes numpy pillow contourpy
+      - run: python3 real-ops-sim/andes-crossing/pipeline/wafs_fetch.py --out out
+      - name: Upload to the server
+        if: ${{ env.FTP_SERVER != '' }}
+        run: |
+          sudo apt-get install -y lftp >/dev/null
+          lftp -u "$FTP_USERNAME","$FTP_PASSWORD" "$FTP_SERVER" -e "set ftp:ssl-allow yes; mirror -R --delete --verbose out/wafs $FTP_DIR; bye"
