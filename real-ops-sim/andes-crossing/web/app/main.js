@@ -68,8 +68,8 @@ async function boot() {
 }
 
 // ---------- camera ----------
-const HERO = { center: [-69.85, -32.95], pitch: 64, bearing: 28 };   // 3D scene: from the south-west, so the onset curtain shows its face and the crossing reads left to right
-function heroZoom() { const w = map.getContainer().clientWidth; return w < 680 ? 6.3 : w < 1344 ? 6.8 : 7.0; }
+const HERO = { center: [-69.85, -32.95], pitch: 68, bearing: 34 };   // 3D scene: from the south-west, so the onset curtain shows its face and the crossing reads left to right
+function heroZoom() { const w = map.getContainer().clientWidth; return w < 680 ? 6.7 : w < 1344 ? 7.3 : 7.5; }
 function opening() {
   setTerrain(true);
   const x = S.plan?.crossings?.[0];
@@ -400,7 +400,8 @@ async function sendReport(form, fc) {
 // ---------- UI wiring ----------
 function wireUi() {
   segInit($('.ac-tabs'), v => { S.tab = v; renderTab(); });
-  $('#btn3d').onclick = () => setTerrain(!map.getTerrain());
+  $('#btn3d').onclick = () => { const on = !map.getTerrain(); setTerrain(on);
+    if (on) map.easeTo({ pitch: HERO.pitch, bearing: HERO.bearing, duration: reduceMotion() ? 0 : 600 }); };   // 3D scene: back to the pitched view
   $('#btnAndes').onclick = () => { const x = S.plan?.crossings?.[0];
     if (x) map.flyTo({ ...HERO, center: x.at, zoom: heroZoom(), duration: reduceMotion() ? 0 : 600 });
     else map.fitBounds([[-84, -56], [-52, 12]], { padding: 48, pitch: 0, bearing: 0, duration: reduceMotion() ? 0 : 600 }); };

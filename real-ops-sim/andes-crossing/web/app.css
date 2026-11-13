@@ -164,7 +164,7 @@ html:not(:is([data-k-arr="A1b"], [data-k-arr="A2"], [data-k-arr="A3"], [data-k-a
   --ac3d-edge: -0.18;       /* edges: darker than the band on a light map, lighter on a dark one */
   --ac3d-hillshade: 1.3;    /* relief shading gain while the scene is on */
   --ac3d-additive: 0;       /* share of additive light in the volumes: none on a light map */
-  --ac3d-face: 0.26;        /* opacity of the top face of the selected band */
+  --ac3d-face: 0.2;         /* opacity of the top face of the selected band */
 }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
   --ac3d-sky: #02060D; --ac3d-horizon: #2A4468; --ac3d-fog: #0E1B2C;

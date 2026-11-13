@@ -1,7 +1,7 @@
 // Andes Crossing service worker: the escape routes, the map and the app shell work with no connection.
 // Live data (METAR, SIGMET, model) is network-first and falls back to the last copy; terrain tiles are cache-first.
 const V = 'ac-v1';
-const SHELL = ['./', 'index.html', 'app.css', 'app/main.js', 'app/engine.js', 'app/data.js', 'app/map-style.js',
+const SHELL = ['./', 'index.html', 'app.css', 'app/main.js', 'app/engine.js', 'app/data.js', 'app/map-style.js', 'app/scene3d.js',
   'vendor/maplibre/maplibre-gl.js', 'vendor/maplibre/maplibre-gl.css',
   'data/basemap.json', 'data/airports.json', 'data/navaids.json', 'data/crest.json', 'data/airways.json',
   'data/escape-routes.json', 'manifest.webmanifest'];

@@ -13,7 +13,7 @@ const mercY = lat => (1 - Math.log(Math.tan(Math.PI / 4 + lat * DEG / 2)) / Math
 const OX = mercX(-70), OY = mercY(-33);            // scene origin: vertices are stored relative to it (float precision)
 const rel = c => [mercX(c[0]) - OX, mercY(c[1]) - OY];
 const flM = fl => fl * 100 * FT;
-const MAX_SEGS = 900, MAX_LABELS = 3, DROP_NM = 50;
+const MAX_SEGS = 600, MAX_LABELS = 3, DROP_NM = 50;   // caps: route legs drawn, onset labels, spacing of drop lines
 // Vertical scale of the 3D view (terrain and everything in the air alike). True scale is unreadable at this range: FL450 is
 // 14 km over a view 700 km wide. Always captioned on the map ("Heights ×4"), DESIGN §8.
 export const EXAGGERATION = 4;
@@ -21,8 +21,8 @@ export const EXAGGERATION = 4;
 const st = {
   map: null, tokens: null, enabled: false, show: { turb: true },
   data: { result: null, band: 'high', fl: 360, plan: null, risk: null },
-  theme: null, exag: 1.8, fadeAt: 0, saved: new Map(),
-  gl: null, ready: false, dirty: true, prog: {}, meshN: 0, lineN: 0, planeN: 0,
+  theme: null, exag: 1, fadeAt: 0, saved: new Map(), narrow: false, failed: false, planeBuf: null,
+  gl: null, ready: false, dirty: true, prog: {}, meshN: 0, lineN: 0,
   labels: [], labelBox: null, vx: null, planes: [],
 };
 
@@ -84,7 +84,7 @@ function readTheme() {
     edge: num('--ac3d-edge', t.dark ? 0.45 : -0.18),                // edges: towards white on the dark map, darker on the light one
     add: num('--ac3d-additive', t.dark ? 0.35 : 0),                // share of additive light in the volumes (glow)
     shade: num('--ac3d-hillshade', 1.3),                           // relief shading is stronger while the scene is on
-    face: num('--ac3d-face', t.dark ? 0.2 : 0.26),                 // opacity of the top face of the selected band
+    face: num('--ac3d-face', 0.2),                 // opacity of the top face of the selected band
     sky: { 'sky-color': v('--ac3d-sky') || t.sky, 'horizon-color': v('--ac3d-horizon') || t.horizon, 'fog-color': v('--ac3d-fog') || t.fog,
       'fog-ground-blend': num('--ac3d-fog-ground', 0.6), 'horizon-fog-blend': num('--ac3d-horizon-fog', 0.5), 'sky-horizon-blend': num('--ac3d-sky-horizon', 0.8) },
   };
@@ -168,40 +168,33 @@ function buildTurb(T, d, want) {
 }
 
 function buildRoute(T, d, want) {
-  const src = d.plan.line, risk = d.risk || [], dens = src.length <= MAX_SEGS / 2 ? 2 : 1, cruise = flM(d.fl);
-  const pts = [], cat = [];                          // cat[k] belongs to the leg pts[k] → pts[k+1]
-  for (let i = 0; i < src.length && pts.length < MAX_SEGS; i++) {
-    const c = i < src.length - 1 ? Math.max(risk[i] || 0, risk[i + 1] || 0) : 0;
-    pts.push(src[i]); cat.push(c);
-    if (dens === 2 && i < src.length - 1) { pts.push([(src[i][0] + src[i + 1][0]) / 2, (src[i][1] + src[i + 1][1]) / 2]); cat.push(c); }
-  }
-  const n = pts.length, dist = new Float64Array(n);
-  for (let i = 1; i < n; i++) dist[i] = dist[i - 1] + nmBetween(pts[i - 1], pts[i]);
-  const total = dist[n - 1];
   // Level at the planned FL from end to end: the app assesses the crossing at this level and does not model climb or descent.
-  const P = pts.map(rel), Z = pts.map(() => cruise), altAt = () => cruise;
-  const at = s => { let i = 1; while (i < n - 1 && dist[i] < s) i++; const k = (s - dist[i - 1]) / Math.max(1e-6, dist[i] - dist[i - 1]);
+  const pts = d.plan.line.slice(0, MAX_SEGS), risk = d.risk || [], n = pts.length, cruise = flM(d.fl);
+  const P = pts.map(rel), dist = new Float64Array(n);
+  for (let i = 1; i < n; i++) dist[i] = dist[i - 1] + nmBetween(pts[i - 1], pts[i]);
+  const total = dist[n - 1], cat = i => Math.min(4, Math.max(risk[i] || 0, risk[i + 1] || 0));   // per leg, as on the flat map
+  const at = s => { let i = 1; while (i < n - 1 && dist[i] < s) i++; const k = Math.min(1, Math.max(0, (s - dist[i - 1]) / Math.max(1e-6, dist[i] - dist[i - 1])));
     return [P[i - 1][0] + k * (P[i][0] - P[i - 1][0]), P[i - 1][1] + k * (P[i][1] - P[i - 1][1])]; };
   // a faint sheet from the ribbon to the ground: the terrain cuts it, which shows the clearance over the crest
-  for (let i = 0; i < n - 1; i++) wall(P[i], P[i + 1], 0, Z[i], 0, Z[i + 1], 3, T.ink, T.dark ? 0.26 : 0.2);
-  // drop lines about every 50 NM, and a firmer one at each crest crossing
-  const xs = (d.plan.crossings || []).slice(0, 4).map(x => { const k = Math.min(n - 2, Math.max(0, (x.index | 0) * dens)); return { x, s: dist[k] + nmBetween(pts[k], x.at) }; });
+  for (let i = 0; i < n - 1; i++) wall(P[i], P[i + 1], 0, cruise, 0, cruise, 3, T.ink, T.dark ? 0.26 : 0.2);
+  // drop lines about every 50 NM, a firmer one at each crest crossing, and a post at each end on its airport
+  const xs = (d.plan.crossings || []).slice(0, 4).map(x => { const k = Math.min(n - 2, Math.max(0, x.index | 0)); return { x, s: dist[k] + nmBetween(pts[k], x.at) }; });
   for (let s = DROP_NM; s < total - DROP_NM * 0.4; s += DROP_NM) {
     if (xs.some(c => Math.abs(c.s - s) < 18)) continue;
-    const p = at(s); seg(p, 0, p, altAt(s), 1, T.ink, 0.55, 0, true);
+    const p = at(s); seg(p, 0, p, cruise, 1, T.ink, 0.55, 0, true);
   }
-  for (const c of xs) { const p = rel(c.x.at); seg(p, 0, p, altAt(c.s), 1.5, T.ink, 0.9); }
-  seg(P[0], 0, P[0], cruise, 1.5, T.ink, 0.8); seg(P[n - 1], 0, P[n - 1], cruise, 1.5, T.ink, 0.8);   // the two ends stand on their airports
+  for (const c of xs) { const p = rel(c.x.at); seg(p, 0, p, cruise, 1.5, T.ink, 0.9); }
+  seg(P[0], 0, P[0], cruise, 1.5, T.ink, 0.8); seg(P[n - 1], 0, P[n - 1], cruise, 1.5, T.ink, 0.8);
   // the ribbon: risk-coloured casing, then the neutral line, as on the flat map (DESIGN §3.2 item 14)
-  for (let i = 0; i < n - 1; i++) seg(P[i], Z[i], P[i + 1], Z[i + 1], 9, T.risk[cat[i]] || T.risk[0], cat[i] > 0 ? 0.95 : 0.4, cat[i] > 0 ? 1 : 0);
-  for (let i = 0; i < n - 1; i++) seg(P[i], Z[i], P[i + 1], Z[i + 1], 5.5, T.casing, 1, 1.5);
-  for (let i = 0; i < n - 1; i++) seg(P[i], Z[i], P[i + 1], Z[i + 1], 3, T.ink, 1, 1);
-  // an aircraft at each crossing, flat in the air and pointing along the track
+  for (let i = 0; i < n - 1; i++) { const c = cat(i); seg(P[i], cruise, P[i + 1], cruise, 9, T.risk[c], c > 0 ? 0.95 : 0.4, c > 0 ? 1 : 0); }
+  for (let i = 0; i < n - 1; i++) seg(P[i], cruise, P[i + 1], cruise, 5.5, T.casing, 1, 1.5);
+  for (let i = 0; i < n - 1; i++) seg(P[i], cruise, P[i + 1], cruise, 3, T.ink, 1, 1);
+  // an aircraft symbol at each crossing, pointing along the track
   for (const c of xs) {
     const a = at(Math.max(0, c.s - 6)), b = at(Math.min(total, c.s + 6)), hx = b[0] - a[0], hy = b[1] - a[1], hl = Math.hypot(hx, hy) || 1, p = rel(c.x.at);
-    st.planes.push({ x: p[0], y: p[1], z: altAt(c.s), hx: hx / hl, hy: hy / hl });
+    st.planes.push({ x: p[0], y: p[1], z: cruise, hx: hx / hl, hy: hy / hl });
   }
-  if (xs[0]) want.push({ kind: 'acft', at: xs[0].x.at, z: altAt(xs[0].s), text: 'FL' + d.fl });
+  if (xs[0]) want.push({ kind: 'acft', at: xs[0].x.at, z: cruise, text: 'FL' + d.fl });
 }
 
 // ---------- labels (DOM, positioned from the same matrix as the scene) ----------
@@ -214,14 +207,13 @@ function setLabels(want) {
     const p = rel(w.at); L.x = p[0]; L.y = p[1]; L.z = w.z; L.sx = NaN;
     const key = w.kind + '|' + w.text + '|' + (w.sub || '') + '|' + (w.cat || '');
     if (L.key === key) return;
-    L.key = key; L.el.className = 'ac3d-label ac3d-' + w.kind; L.el.replaceChildren();
+    L.key = key; L.w = 0; L.flip = null; L.el.className = 'ac3d-label ac3d-' + w.kind; L.el.replaceChildren();
     if (w.kind === 'onset') {
       const sw = document.createElement('span'); sw.className = 'ac-sw'; sw.dataset.cat = w.cat; sw.textContent = CAT_LETTER[w.cat] || ''; sw.setAttribute('aria-hidden', 'true');
       const tx = document.createElement('span'); tx.className = 'ac3d-label-text'; tx.textContent = w.text;
       const sub = document.createElement('span'); sub.className = 'ac3d-label-sub'; sub.textContent = w.sub;
       L.el.append(sw, tx, sub);
     } else L.el.textContent = w.text;
-    L.w = L.el.offsetWidth; L.flip = null;
   });
 }
 function placeLabels(m, zs, w, h) {
@@ -235,6 +227,7 @@ function placeLabels(m, zs, w, h) {
       on = sx > -40 && sx < w + 40 && sy > -20 && sy < h + 40;
     }
     if (on !== L.on) { L.on = on; L.el.style.opacity = on ? '1' : '0'; }
+    if (on && !L.w) L.w = L.el.offsetWidth;                // measured once per text, when first shown
     const flip = on && sx + L.w > w - 64 && sx - L.w > 0;   // keep clear of the buttons on the right edge
     if (flip !== L.flip) { L.flip = flip; L.el.classList.toggle('ac3d-flip', flip); }
     if (on && (sx !== L.sx || sy !== L.sy)) { L.sx = sx; L.sy = sy; L.el.style.transform = `translate(${sx}px,${sy}px)`; }
@@ -296,21 +289,24 @@ void main() {
 }`;
 const PLANE_VS = `
 attribute vec2 a_local;
-uniform mat4 u_matrix; uniform float u_zscale, u_size; uniform vec3 u_anchor; uniform vec2 u_head, u_px;
-void main() {
-  vec2 p = u_anchor.xy + (u_head * a_local.x + vec2(-u_head.y, u_head.x) * a_local.y) * u_size;
-  vec4 c = u_matrix * vec4(p, u_anchor.z * u_zscale, 1.0);
-  gl_Position = vec4(c.xy + u_px * c.w, c.z, c.w);
+uniform mat4 u_matrix; uniform float u_zscale, u_size; uniform vec3 u_anchor; uniform vec2 u_head, u_px, u_view;
+void main() {   // a symbol of constant size on screen, turned to the track as the camera sees it
+  float z = u_anchor.z * u_zscale;
+  vec4 c = u_matrix * vec4(u_anchor.xy, z, 1.0), f = u_matrix * vec4(u_anchor.xy + u_head * 1e-4, z, 1.0);
+  vec2 d = f.xy / f.w * u_view - c.xy / c.w * u_view; float l = length(d);
+  vec2 dir = l > 1e-4 ? d / l : vec2(1.0, 0.0);
+  vec2 p = (dir * a_local.x + vec2(-dir.y, dir.x) * a_local.y) * u_size + u_px;
+  gl_Position = vec4(c.xy + p / u_view * c.w, c.z, c.w);
 }`;
 const PLANE_FS = `precision mediump float; uniform vec4 u_color; uniform float u_alpha; void main() { float a = u_color.a * u_alpha; gl_FragColor = vec4(u_color.rgb * a, a); }`;
 // a jet seen from above, nose along +x, in units of its own length
 const PLANE = (() => {
   const tri = [], q = (a, b, c, d) => tri.push(...a, ...b, ...c, ...a, ...c, ...d), both = (a, b, c, d) => { q(a, b, c, d); q([a[0], -a[1]], [b[0], -b[1]], [c[0], -c[1]], [d[0], -d[1]]); };
-  tri.push(0.52, 0, 0.38, 0.055, 0.38, -0.055);                                   // nose
-  q([0.38, 0.055], [-0.4, 0.05], [-0.4, -0.05], [0.38, -0.055]);                  // fuselage
-  tri.push(-0.4, 0.05, -0.52, 0, -0.4, -0.05);                                    // tail cone
-  both([0.16, 0.05], [-0.14, 0.5], [-0.24, 0.5], [-0.1, 0.05]);                   // wings
-  both([-0.34, 0.045], [-0.47, 0.2], [-0.52, 0.2], [-0.46, 0.045]);               // tailplane
+  tri.push(0.54, 0, 0.36, 0.085, 0.36, -0.085);                                   // nose
+  q([0.36, 0.085], [-0.36, 0.075], [-0.36, -0.075], [0.36, -0.085]);              // fuselage (wider than the ribbon it sits on)
+  tri.push(-0.36, 0.075, -0.54, 0, -0.36, -0.075);                                // tail cone
+  both([0.14, 0.07], [-0.2, 0.52], [-0.3, 0.52], [-0.1, 0.07]);                   // wings, swept
+  both([-0.34, 0.06], [-0.48, 0.22], [-0.54, 0.22], [-0.47, 0.06]);               // tailplane
   return new Float32Array(tri);
 })();
 const HALO = [1, 0, 0.7, 0.7, 0, 1, -0.7, 0.7, -1, 0, -0.7, -0.7, 0, -1, 0.7, -0.7];
@@ -329,7 +325,7 @@ function glInit(gl) {
   st.gl = gl;
   st.prog.mesh = program(gl, MESH_VS, MESH_FS, ['a_pos', 'a_fx', 'a_color'], ['u_matrix', 'u_zscale', 'u_alpha', 'u_add', 'u_dpr', 'u_lift', 'u_pleat', 'u_hatch']);
   st.prog.line = program(gl, LINE_VS, LINE_FS, ['a_pos', 'a_other', 'a_par', 'a_color', 'a_flag'], ['u_matrix', 'u_zscale', 'u_alpha', 'u_add', 'u_dpr', 'u_near', 'u_view']);
-  st.prog.plane = program(gl, PLANE_VS, PLANE_FS, ['a_local'], ['u_matrix', 'u_zscale', 'u_size', 'u_anchor', 'u_head', 'u_px', 'u_color', 'u_alpha']);
+  st.prog.plane = program(gl, PLANE_VS, PLANE_FS, ['a_local'], ['u_matrix', 'u_zscale', 'u_size', 'u_anchor', 'u_head', 'u_px', 'u_view', 'u_color', 'u_alpha']);
   mesh.glbuf = gl.createBuffer(); line.glbuf = gl.createBuffer();
   st.planeBuf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, st.planeBuf); gl.bufferData(gl.ARRAY_BUFFER, PLANE, gl.STATIC_DRAW);
   st.ready = true; st.dirty = true;
@@ -390,13 +386,13 @@ function render(gl, args) {
   if (st.planes.length) {
     const p = st.prog.plane; gl.useProgram(p.p); gl.disable(gl.DEPTH_TEST);
     gl.uniformMatrix4fv(p.u.u_matrix, false, M); gl.uniform1f(p.u.u_zscale, zs); gl.uniform1f(p.u.u_alpha, alpha);
-    gl.uniform1f(p.u.u_size, 40 / (tr.worldSize || 512 * Math.pow(2, tr.zoom)));
+    gl.uniform1f(p.u.u_size, 40 * dpr); gl.uniform2f(p.u.u_view, W / 2, H / 2);
     gl.bindBuffer(gl.ARRAY_BUFFER, st.planeBuf);
     gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 8, 0); gl.disableVertexAttribArray(1); gl.disableVertexAttribArray(2);
     for (let i = 0; i < st.planes.length; i++) {
       const a = st.planes[i]; gl.uniform3f(p.u.u_anchor, a.x, a.y, a.z); gl.uniform2f(p.u.u_head, a.hx, a.hy);
       gl.uniform4f(p.u.u_color, T.casing[0], T.casing[1], T.casing[2], 1);
-      for (let k = 0; k < 16; k += 2) { gl.uniform2f(p.u.u_px, HALO[k] * 3.2 * dpr / W, HALO[k + 1] * 3.2 * dpr / H); gl.drawArrays(gl.TRIANGLES, 0, PLANE.length / 2); }
+      for (let k = 0; k < 16; k += 2) { gl.uniform2f(p.u.u_px, HALO[k] * 1.6 * dpr, HALO[k + 1] * 1.6 * dpr); gl.drawArrays(gl.TRIANGLES, 0, PLANE.length / 2); }
       gl.uniform4f(p.u.u_color, T.ink[0], T.ink[1], T.ink[2], 1); gl.uniform2f(p.u.u_px, 0, 0); gl.drawArrays(gl.TRIANGLES, 0, PLANE.length / 2);
     }
   }
@@ -409,7 +405,7 @@ function render(gl, args) {
 // Only paint properties that map-style.js also sets are overridden, so applyTheme() always puts the flat values back.
 function paint(layer, prop, value3d) {
   const m = st.map, key = layer + '|' + prop; if (!m.getLayer(layer)) return;
-  if (st.enabled) { if (!st.saved.has(key)) st.saved.set(key, m.getPaintProperty(layer, prop)); m.setPaintProperty(layer, prop, value3d); }
+  if (st.enabled) { if (!st.saved.has(key)) st.saved.set(key, m.getPaintProperty(layer, prop)); m.setPaintProperty(layer, prop, typeof value3d === 'function' ? value3d(st.saved.get(key)) : value3d); }
   else if (st.saved.has(key)) { m.setPaintProperty(layer, prop, st.saved.get(key)); st.saved.delete(key); }
 }
 function flat() {
@@ -420,7 +416,7 @@ function flat() {
   const ink = T.ink.map(v => Math.round(v * 255));
   paint('turb-fill', 'fill-opacity', ['match', ['get', 'cat'], 1, 0.1, 2, 0.13, 3, 0.17, 0]);   // the footprint of the volume (and still the tap target)
   paint('turb-onset', 'line-width', 1.25);                                                    // the foot of the curtain
-  paint('hillshade', 'hillshade-exaggeration', Math.min(1, (T.dark ? 0.6 : 0.5) * T.shade));                               // the range reads with depth
+  paint('hillshade', 'hillshade-exaggeration', o => Array.isArray(o) && o[0] === 'interpolate' ? o.map((x, i) => i >= 4 && i % 2 === 0 ? Math.min(1, x * T.shade) : x) : o);   // same ramp, stronger
   paint('route-line', 'line-width', 1.5);                                                     // the ground track under the ribbon
   paint('route-line', 'line-color', `rgba(${ink[0]},${ink[1]},${ink[2]},0.45)`);
   if (m.getLayer('relief-tint')) m.setPaintProperty('relief-tint', 'color-relief-color', reliefRamp(T));
@@ -458,7 +454,7 @@ export function setEnabled(on) {
   if (!st.map) return;
   const was = st.enabled; st.enabled = !!on;
   st.exag = st.map.getTerrain()?.exaggeration ?? st.exag;
-  if (st.enabled && !was) st.fadeAt = performance.now();
+  if (st.enabled && !was) st.fadeAt = performance.now();   // one 200 ms fade in (opacity only)
   flat(); st.map.triggerRepaint();
 }
 export function setLayers(show) { Object.assign(st.show, show); if (st.map) { flat(); build(); } }
