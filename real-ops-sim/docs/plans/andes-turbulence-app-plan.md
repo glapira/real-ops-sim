@@ -91,6 +91,14 @@ For the mountain-wave part, GTG multiplies a normal turbulence diagnostic by ter
 4. **International SIGMETs.** aviationweather.gov serves decoded international SIGMETs in JSON at `/api/data/isigmet`, free and without a key.
 5. **Shared airline EDR data.** IATA runs a programme (Turbulence Aware) where member airlines share automated EDR reports. Worth asking whether an operator can join, because those reports would be the best truth data for tuning.
 
+### Getting access to WAFS and shared turbulence data
+
+1. **Free public WAFS grids (check first).** NOAA appears to publish the 0.25° WAFS hazard files, EDR turbulence included, on its public NOMADS server inside the GFS output (file pattern `gfs.tCCz.awf_0p25.fFFF.grib2`). Forum reports say these files cover 13 levels at 3-hourly steps from 6 to 36 h. If Phase 0 confirms this, we get the WAFS forecast with no account.
+2. **WIFS account (WAFC Washington, covers the Americas).** You apply online at aviationweather.gov/wifs. The rule: you must perform international flight operations, or provide weather information for them. The ICAO State official and the FAA WIFS approving official both sign off, case by case. The operator holding the AOC (Comlux) is the natural applicant. Legacy WIFS access closes in November 2028, and the newer API replaces it.
+3. **SADIS API (WAFC London).** Run by the Met Office, approval by the SADIS Manager. It mainly serves Europe, Africa, the Middle East and Asia, so WIFS is the better fit for South America.
+4. **IATA Turbulence Aware.** Airline programme, 21 to 22 airlines in 2024 to 2026. Aircraft contribute through NCAR EDR software in the avionics (an Airbus or Boeing option). Airlines can also nominate a data integrator to receive the data. I found no published route for business aviation operators or any public pricing, so this needs a direct enquiry to IATA.
+5. **SkyPath (business aviation alternative).** Collects turbulence from iPads on board, ADS-B, EDR reports and PIREPs. It supports business aviation and offers an SDK. A realistic second source of truth data if IATA says no.
+
 ---
 
 ## 2. What the app does
@@ -287,5 +295,13 @@ Tune the curves from crew reports. Train the Random Forest once enough data exis
 26. aviationweather.gov Data API OpenAPI spec (isigmet). https://aviationweather.gov/data/api/swagger.yaml
 27. University of Wyoming sounding archive, Chilean stations (LSST note). https://confluence.lsstcorp.org/display/SIM/Wyoming+web+site+with+archived+atmospheric+data
 28. CIMSS, mountain wave signatures on water vapour imagery. https://cimss.ssec.wisc.edu/satellite-blog/archives/2115
+
+29. WIFS (WAFS Internet File Service). https://aviationweather.gov/wifs/
+30. ICAO, obtaining a WIFS account. https://www.icao.int/sites/default/files/METP/Documents/Obtaining-access-to-WIFS-as-a-backup-to-SADIS-FTP.pdf
+31. SADIS WAFS Gridded Data service. https://eur-registry.swim.aero/node/166466
+32. IATA, Turbulence Aware platform expands (Dec 2024). https://www.iata.org/en/pressroom/2024-releases/2024-12-10-04/
+33. Airbus, turbulence alert collaborative network. https://www.aircraft.airbus.com/en/newsroom/news/2023-03-turbulence-alert-the-collaborative-network
+34. SkyPath. https://skypath.io
+35. X-Plane.org forum, WAFS GRIB file naming on NOMADS. https://forums.x-plane.org/forums/topic/282159-what-the-heck-is-a-grib-file/
 
 Note: this session's network blocked direct downloads of these pages. The findings above come from search summaries and abstracts. The blog thresholds (8 to 12 hPa, 5 °C, 280° to 320°) are not confirmed by an official source yet.
