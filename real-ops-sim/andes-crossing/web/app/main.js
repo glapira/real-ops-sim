@@ -332,6 +332,7 @@ function renderEscapeTab() {
           : h('div', { class: 'k-subhead' }, ins?.off != null ? `${ins.off} NM from ${r.chart}: off the charted route.` : 'Position not on this chart.')));
     }
     box.append(h('h3', { class: 'ac-section-title' }, `${r.chart} · ${dirWord(r.direction)} · ${r.aircraft === 'B788' ? '787-8' : 'Global 8000'}`));
+    box.append(h('p', { class: 'ac-row-sub' }, h('span', { class: 'k-chip' }, r.approval ? 'Approved proof' : 'Proof, not yet approved'), ' ', r.approval || ''));
     for (const sg of r.segments) {
       const a = sg.action || {}, c = ESC.colors[a.airport] ?? 5;
       box.append(h('div', { class: 'ac-esc-seg', style: `--esc:${escColor(c)}` },
@@ -343,6 +344,10 @@ function renderEscapeTab() {
     for (const q of r.questions || []) box.append(h('p', { class: 'ac-stamp' }, 'To confirm: ' + q));
     box.append(h('p', { class: 'ac-stamp' }, `Proof chart ${r.proof_date}. Fix positions from the printed airway distances; dotted paths are schematic.`));
   }
+  const pend = (S.escape?.pending || []).filter(q => q.aircraft === S.aircraft);
+  if (pend.length) { box.append(h('h3', { class: 'ac-section-title' }, 'Charts to come'));
+    for (const q of pend) box.append(h('div', { class: 'ac-esc-seg' }, h('b', {}, `${q.chart} · ${q.direction}`), h('p', { class: 'k-subhead' }, q.status),
+      q.string ? h('p', { class: 'ac-mono' }, q.string) : null, q.note ? h('p', { class: 'ac-stamp' }, q.note) : null)); }
   if (S.escape?.missing?.length) box.append(h('p', { class: 'ac-stamp' }, 'Missing: ' + S.escape.missing.join(' · ')));
   box.append(h('h3', { class: 'ac-section-title' }, 'Own position'));
   if (!S.gps) box.append(h('p', { class: 'k-subhead' }, S.watch ? 'Waiting for GPS…' : 'Turn on the position button on the map. On iPad it uses the device GPS (cellular models) or a connected GPS receiver.'));
