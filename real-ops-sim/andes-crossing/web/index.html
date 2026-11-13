@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>Andes Crossing</title>
+<meta name="description" content="Escape routes and turbulence likelihood for the Andes crossing. Reference only, not for navigation.">
+<meta name="robots" content="noindex">
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#F2F2F7">
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#000000">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Andes">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<script>
+  /* theme: the key is shared with Ledger. Dark by default here, without writing the shared key (DESIGN §0). */
+  try { var th = localStorage.getItem('solidaire.theme'); document.documentElement.setAttribute('data-theme', th === 'light' ? 'light' : 'dark'); } catch (e) { document.documentElement.setAttribute('data-theme', 'dark'); }
+  document.documentElement.classList.add('ios');
+</script>
+<link rel="stylesheet" href="/solidaire/shared/kit/kit.css">
+<link rel="stylesheet" href="/solidaire/shared/kit/kit-components.css">
+<link rel="stylesheet" href="vendor/maplibre/maplibre-gl.css">
+<link rel="stylesheet" href="andes.css">
+<link rel="stylesheet" href="app.css">
+<script src="/solidaire/shared/kit/kit.js" defer></script>
+<script src="vendor/maplibre/maplibre-gl.js" defer></script>
+<script type="module" src="app/main.js"></script>
+</head>
+<body>
+<div class="k-app ac-app" data-k-focus="detail">
+  <section class="k-list k-glass ac-panel" aria-label="Crossing">
+    <div class="ac-grabber" aria-hidden="true"></div>
+    <div class="ac-peekline" id="peekline" aria-live="polite"></div>
+    <div class="ac-panel-head">
+      <div class="k-seg ac-tabs" role="radiogroup" aria-label="Panel">
+        <button class="k-seg-item" value="crossing" aria-checked="true">Crossing</button>
+        <button class="k-seg-item" value="escape">Escape</button>
+        <button class="k-seg-item" value="gauge">Gauge</button>
+        <button class="k-seg-item" value="report">Report</button>
+      </div>
+    </div>
+    <div class="ac-panel-body">
+      <div class="ac-tab" data-tab="crossing"></div>
+      <div class="ac-tab" data-tab="escape" hidden></div>
+      <div class="ac-tab" data-tab="gauge" hidden></div>
+      <div class="ac-tab" data-tab="report" hidden></div>
+      <p class="k-footnote ac-disclaimer">Reference only. Not for navigation. Check the official briefing and SIGMETs.</p>
+    </div>
+  </section>
+
+  <main class="k-detail ac-stage">
+    <div class="ac-map" id="map" role="application" aria-label="Map of the Andes crossing"></div>
+    <header class="ac-bar">
+      <button class="k-glass ac-capsule" id="routeBtn" type="button" aria-label="Route">
+        <span class="k-figure" id="routeText">SCEL → SAME</span><span class="ac-capsule-sub" id="acftText">787-8</span>
+      </button>
+      <div class="ac-status" id="status" role="status" aria-live="polite"></div>
+    </header>
+    <div class="k-glass ac-mapbtns" role="toolbar" aria-label="Map">
+      <button class="k-btn k-btn-icon" id="btnLayers" type="button" aria-label="Layers"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2.5 8 12 13l9.5-5L12 3Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="m2.5 12 9.5 5 9.5-5M2.5 16l9.5 5 9.5-5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg></button>
+      <button class="k-btn k-btn-icon" id="btn3d" type="button" aria-label="3D terrain" aria-pressed="true"><span class="ac-btn-word">3D</span></button>
+      <button class="k-btn k-btn-icon" id="btnAndes" type="button" aria-label="Recentre on the Andes"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m2 19 6.5-11 3.5 6 2.5-4L22 19H2Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg></button>
+      <button class="k-btn k-btn-icon" id="btnGps" type="button" aria-label="Show my position" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 4 4 11l7 2 2 7 7-16Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg></button>
+    </div>
+    <div class="k-glass ac-fl" id="fl" role="slider" aria-label="Flight level" tabindex="0"></div>
+    <div class="ac-bottom">
+      <div class="k-glass ac-legend" id="legend" aria-label="Legend"></div>
+      <div class="k-glass ac-scrub" id="scrub" aria-label="Forecast time"></div>
+    </div>
+  </main>
+</div>
+
+<div id="layersCard" class="ac-card" hidden>
+  <div class="k-group">
+    <div class="k-group-head">Weather</div>
+    <label class="k-row"><span class="k-row-main">Turbulence</span><input class="k-switch" type="checkbox" data-layer="turb" checked></label>
+    <label class="k-row"><span class="k-row-main">SIGMET</span><input class="k-switch" type="checkbox" data-layer="sigmet" checked></label>
+    <label class="k-row"><span class="k-row-main">WAFS EDR grid</span><input class="k-switch" type="checkbox" data-layer="wafs" checked></label>
+  </div>
+  <div class="k-group">
+    <div class="k-group-head">Aeronautical</div>
+    <label class="k-row"><span class="k-row-main">Escape routes</span><input class="k-switch" type="checkbox" data-layer="escape" checked></label>
+    <label class="k-row"><span class="k-row-main">Airways</span><input class="k-switch" type="checkbox" data-layer="airways" checked></label>
+    <label class="k-row"><span class="k-row-main">Navaids</span><input class="k-switch" type="checkbox" data-layer="navaids"></label>
+    <label class="k-row"><span class="k-row-main">Andes crest</span><input class="k-switch" type="checkbox" data-layer="crest" checked></label>
+  </div>
+  <div class="k-group">
+    <div class="k-group-head">Appearance</div>
+    <div class="k-seg" id="themeSeg" role="radiogroup" aria-label="Appearance">
+      <button class="k-seg-item" value="light">Light</button>
+      <button class="k-seg-item" value="dark" aria-checked="true">Dark</button>
+    </div>
+    <button class="k-btn k-btn-gray k-btn-block ac-offline-btn" id="btnOffline" type="button">Save the Andes for offline use</button>
+  </div>
+</div>
+</body>
+</html>

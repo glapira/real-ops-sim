@@ -1,0 +1,114 @@
+/* ============ andes.css — Andes Crossing tokens. Loads after kit.css. Adds; never overrides a kit role. ============ */
+:root {
+  /* --- Roles the map borrows from the kit (they follow theme and Increase Contrast by themselves) --- */
+  --map-label: var(--ink);            /* airport ids, route fixes */
+  --map-label-2: var(--slate);        /* names, fixes, frequencies, peaks */
+  --map-airport: var(--ink);
+  --map-route: var(--ink);            /* the plan is ink, never a hue */
+  --map-select: var(--ink);           /* selection on the map: ink + halo, never --tint */
+  --map-sigmet: var(--ink);           /* official products: neutral outline */
+  --map-route-casing: var(--map-land);
+
+  /* --- Risk scale (light map). L* falls with severity: 74 / 58 / 47 / 33. --- */
+  --risk-on-dark-ink: #1C1C1E; --risk-on-light-ink: #FFFFFF;
+  --risk-nil: #8C97A6;       --risk-nil-on: var(--ink);                  /* outline only, never a fill on the map */
+  --risk-light: #E0B000;     --risk-light-on: var(--risk-on-dark-ink);
+  --risk-moderate: #E06A00;  --risk-moderate-on: var(--risk-on-dark-ink);
+  --risk-severe: #D7261E;    --risk-severe-on: var(--risk-on-light-ink);
+  --risk-extreme: #7A1FA2;   --risk-extreme-on: var(--risk-on-light-ink);
+  --risk-edge-extreme: #5B1380;                                          /* band edge line for extreme */
+  --risk-fill-light: 0.42; --risk-fill-moderate: 0.52; --risk-fill-severe: 0.62; --risk-fill-extreme: 0.70;
+  --risk-hatch: rgba(28, 28, 30, 0.40);                                  /* hatch ink on severe / extreme */
+  --risk-edge-boost: 0px;                                                /* added to edge widths (Increase Contrast) */
+
+  /* --- Confidence / uncertainty. Multiplies the risk fill alpha; drives edge style. --- */
+  --conf-high: 1; --conf-medium: 0.72; --conf-low: 0.45;
+  --conf-low-dash: 3 3;                                                  /* band edge and chart stroke at Low */
+  --conf-bar-on: var(--ink); --conf-bar-off: var(--fill-3);
+
+  /* --- Map palette (light) --- */
+  --map-ocean: #CBD9E6;        --map-ocean-label: #6585A6;
+  --map-land: #EEF1F4;         --map-land-dim: #E4E8ED;                  /* dim = outside Chile and Argentina */
+  --map-lake: #CBD9E6;
+  --map-hill-shadow: rgba(58, 74, 96, 0.55);
+  --map-hill-highlight: rgba(255, 255, 255, 0.90);
+  --map-hill-accent: rgba(120, 135, 155, 0.35);
+  --map-relief-high: #FFFFFF;                                            /* colour-relief tint above 4,000 m */
+  --map-coast: #8FA3B8;        --map-border: #8794A6;       --map-fir: #2F7F74;
+  --map-airway-upper: #0F6CBD; --map-airway-lower: #6B778C; --map-airway-casing: rgba(238, 241, 244, 0.75);
+  --map-airway-dim: 0.55;                                                /* opacity of non-crossing airways */
+  --map-fix: #3D4B5E;          --map-navaid: #2E5E8C;
+  --map-airport-fill: #FFFFFF; --map-halo: rgba(238, 241, 244, 0.90);    /* symbol and label halo = land colour */
+  --map-sigmet-fill: rgba(28, 28, 30, 0.05);
+  --map-grid: rgba(28, 28, 30, 0.14);                                    /* 0.25 degree cell outlines */
+  --map-sky: #BFD5EA; --map-horizon: #E8EEF4; --map-fog: #EEF1F4;
+
+  /* --- App sizes (rem, capped like the kit's own, so they follow the text size) --- */
+  --ac-fl-w: var(--hit);                 /* level slider width */
+  --ac-fl-step: min(1.75rem, 34px);      /* pitch between two levels */
+  --ac-scrub-h: min(4rem, 80px);         /* time scrubber height */
+  --ac-scrub-cell: min(3.5rem, 72px);    /* one forecast step */
+  --ac-peek: min(9.25rem, 190px);        /* sheet peek detent, plus --sa-bottom */
+  --ac-drawer-h: 280px;                  /* cross-section drawer (px: matched against the measured space) */
+  --ac-font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;   /* raw METAR / SIGMET text only */
+
+  /* --- Motion. UI motion uses the kit's springs and --dur-1..3 (≤ 240 ms, R56). --- */
+  --ac-layer-fade: var(--dur-2);         /* map layer crossfades: 200 ms */
+  /* The one exemption from R56: map camera moves. A camera move is a change of viewpoint, like a scroll, not a UI
+     transition. Nothing else in the app may use these. */
+  --ac-camera-open: 2800ms;              /* first-launch flight, continent to the Andes */
+  --ac-camera-move: 600ms;               /* recentre, 2D/3D, north-up, fit to route */
+  --ac-camera-ease: cubic-bezier(0.45, 0, 0.15, 1);
+}
+
+/* ---- Dark. Keep the two blocks identical (same pattern as kit.css). ---- */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    /* Risk (dark map). L*: 87 / 74 / 58 / 49. Extreme carries a light edge so it never sinks into the map. */
+    --risk-nil: #8E9BAE;
+    --risk-light: #FFD60A; --risk-moderate: #FF9F0A;
+    --risk-severe: #FF453A; --risk-severe-on: var(--risk-on-dark-ink);
+    --risk-extreme: #A63CF0; --risk-edge-extreme: #E3B5FF;
+    --risk-fill-light: 0.34; --risk-fill-moderate: 0.46; --risk-fill-severe: 0.58; --risk-fill-extreme: 0.66;
+    --risk-hatch: rgba(255, 255, 255, 0.38);
+    --map-ocean: #08111C; --map-ocean-label: #4E6480;
+    --map-land: #172232; --map-land-dim: #111A27; --map-lake: #08111C;
+    --map-hill-shadow: rgba(2, 6, 12, 0.80); --map-hill-highlight: rgba(143, 166, 196, 0.50); --map-hill-accent: rgba(8, 16, 28, 0.60);
+    --map-relief-high: #C9D6E6;
+    --map-coast: #3B4C63; --map-border: #5C6B80; --map-fir: #5F9C92;
+    --map-airway-upper: #6CC7F5; --map-airway-lower: #8A96AD; --map-airway-casing: rgba(8, 17, 28, 0.70);
+    --map-fix: #A9B6C8; --map-navaid: #9CC3E6;
+    --map-airport-fill: #101826; --map-halo: rgba(13, 21, 33, 0.90);
+    --map-sigmet-fill: rgba(242, 242, 247, 0.06); --map-grid: rgba(242, 242, 247, 0.14);
+    --map-sky: #050A12; --map-horizon: #1B2A3F; --map-fog: #0B1420;
+  }
+}
+:root[data-theme="dark"] {
+  --risk-nil: #8E9BAE;
+  --risk-light: #FFD60A; --risk-moderate: #FF9F0A;
+  --risk-severe: #FF453A; --risk-severe-on: var(--risk-on-dark-ink);
+  --risk-extreme: #A63CF0; --risk-edge-extreme: #E3B5FF;
+  --risk-fill-light: 0.34; --risk-fill-moderate: 0.46; --risk-fill-severe: 0.58; --risk-fill-extreme: 0.66;
+  --risk-hatch: rgba(255, 255, 255, 0.38);
+  --map-ocean: #08111C; --map-ocean-label: #4E6480;
+  --map-land: #172232; --map-land-dim: #111A27; --map-lake: #08111C;
+  --map-hill-shadow: rgba(2, 6, 12, 0.80); --map-hill-highlight: rgba(143, 166, 196, 0.50); --map-hill-accent: rgba(8, 16, 28, 0.60);
+  --map-relief-high: #C9D6E6;
+  --map-coast: #3B4C63; --map-border: #5C6B80; --map-fir: #5F9C92;
+  --map-airway-upper: #6CC7F5; --map-airway-lower: #8A96AD; --map-airway-casing: rgba(8, 17, 28, 0.70);
+  --map-fix: #A9B6C8; --map-navaid: #9CC3E6;
+  --map-airport-fill: #101826; --map-halo: rgba(13, 21, 33, 0.90);
+  --map-sigmet-fill: rgba(242, 242, 247, 0.06); --map-grid: rgba(242, 242, 247, 0.14);
+  --map-sky: #050A12; --map-horizon: #1B2A3F; --map-fog: #0B1420;
+}
+
+/* ---- Increase Contrast (html.contrast-more, set by kit.js). Theme-neutral, so one block serves light and dark. ---- */
+:root.contrast-more {
+  --map-label-2: var(--ink);
+  --map-airway-dim: 1;
+  --risk-edge-boost: 0.5px;
+  --conf-medium: 0.85; --conf-low: 0.65;
+}
+
+/* ---- Reduce Motion (html.reduce-motion, set by kit.js): the camera jumps, layers crossfade ---- */
+html.reduce-motion { --ac-camera-open: 0ms; --ac-camera-move: 0ms; }

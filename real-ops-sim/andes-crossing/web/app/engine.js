@@ -1,5 +1,5 @@
 // Andes Crossing · turbulence likelihood engine v0 (no DOM, no network: the iOS shell can run the same file).
-// Inputs: the two METARs of a station pair, model winds/temperatures at points along the crest, the crest line.
+// Inputs: model winds/temperatures at points along the whole Andes crest (11°N–55°S) and the station pairs across it.
 // Output: per crest segment and flight-level band, a category (0 nil … 3 severe), an uncalibrated likelihood and
 // the geometry of the band where turbulence is expected to start (onset over the crest) and end (downstream).
 // Reference only. v0 rules come from the research plan (docs/plans/andes-turbulence-app-plan.md §1.2–1.4) and are
@@ -28,7 +28,7 @@ export function bearing([lon1, lat1], [lon2, lat2]) {
 }
 
 // wind "from" direction and speed → component blowing across a ridge whose line runs along ridgeBearing.
-// Positive = west→east across a north–south ridge (toward the lee side, Argentina).
+// Positive = west→east across a north–south ridge. Mountain waves form with flow from either side, so callers use |value|.
 export function crossComponent(dirFrom, spd, ridgeBearing) {
   const toward = (dirFrom + 180) % 360;
   // the crest is walked north→south, so its left-hand normal points east (the lee side in westerly flow)
@@ -55,15 +55,19 @@ export function vws(s1, d1, z1, s2, d2, z2) {
   return dzFt > 0 ? Math.hypot(u2 - u1, v2 - v1) / dzFt * 1000 : null;
 }
 
-// Pressure pair check (SCEL minus SAME QNH, temperature gap). Thresholds: pilot rule of thumb (plan §1.2), unverified.
-export function pressurePair(windward, lee) {
-  if (!windward || !lee || windward.qnh == null || lee.qnh == null) return null;
-  const dp = windward.qnh - lee.qnh, dt = (lee.temp ?? 0) - (windward.temp ?? 0);
+// Pressure pair across the range: QNH west (Pacific side) minus QNH east, and how much warmer the east side is.
+// cfg comes from data/pressure-pairs.json. Only a pair with a published rule (cfg.rule) raises the score; the others are
+// shown for information. Rule for SCEL–SAME, pilot rule of thumb (plan §1.2), unverified by an official source.
+export function pressurePair(cfg, west, east) {
+  if (!west || !east || west.qnh == null || east.qnh == null) return cfg ? { ...cfg, missing: true, scored: false, level: 0 } : null;
+  const dp = west.qnh - east.qnh, dt = (east.temp ?? 0) - (west.temp ?? 0);
   let level = 0;
-  if (dp >= 8) level = 2; else if (dp >= 4) level = 1;
-  if (dp >= 12) level = 3;
-  if (dt >= 5) level = Math.max(level, 1);
-  return { dp: +dp.toFixed(1), dt: +dt.toFixed(1), level, flags: { dp8: dp >= 8, dp12: dp >= 12, dt5: dt >= 5 } };
+  if (cfg?.rule) {
+    if (dp >= 4) level = 1; if (dp >= 8) level = 2; if (dp >= 12) level = 3;
+    if (dt >= 5) level = Math.max(level, 1);
+  }
+  return { ...(cfg || {}), dp: +dp.toFixed(1), dt: +dt.toFixed(1), level, scored: !!cfg?.rule,
+    flags: { dp8: dp >= 8, dp12: dp >= 12, dt5: dt >= 5 } };
 }
 
 const score2cat = s => s >= 2.5 ? 3 : s >= 1.5 ? 2 : s >= 0.6 ? 1 : 0;
@@ -72,18 +76,19 @@ const mogLikelihood = s => Math.round(100 / (1 + Math.exp(-2.2 * (s - 1.6))));
 
 // One crest sample at one forecast hour.
 // lv: { 700:{spd,dir,t,z}, 500:{…}, 300:{…}, 250:{…}, 200:{…} } (kt, deg from, °C, m)
-export function assessPoint(lv, ridgeBearing, pair, central) {
+// pair: the pressure-pair result that covers this latitude, or null. Only pairs with a published rule add to the score.
+export function assessPoint(lv, ridgeBearing, pair) {
   const c500 = crossComponent(lv[500].dir, lv[500].spd, ridgeBearing);
   const c700 = crossComponent(lv[700].dir, lv[700].spd, ridgeBearing);
   const off = angleOff(lv[500].dir, ridgeBearing);
   const dirF = off <= 30 ? 1 : off <= 60 ? 0.5 : 0;
   const n = bvf(lv[700].t, lv[700].z, 700, lv[500].t, lv[500].z, 500);
   const stabF = n == null ? 0.8 : n >= 0.01 ? 1 : n >= 0.006 ? 0.75 : 0.5;
-  const u = Math.max(0, c500);
+  const u = Math.abs(c500);
   // crest-level wind rules: 25–50 kt moderate possible, > 50 kt severe possible (plan §1.4)
   let mw = (u < 20 ? 0 : u < 35 ? 0.9 : u < 50 ? 1.8 : 2.7) * dirF * stabF;
-  const trapped = c700 > 0 && lv[500].spd > 1.6 * Math.max(1, lv[700].spd); // the 1.6 rule, as a flag
-  if (central && pair && u >= 15) mw += pair.level >= 3 ? 0.9 : pair.level === 2 ? 0.6 : pair.level === 1 ? 0.3 : 0;
+  const trapped = Math.abs(c700) > 10 && lv[500].spd > 1.6 * Math.max(1, lv[700].spd); // the 1.6 rule, as a flag
+  if (pair && pair.scored && u >= 15) mw += pair.level >= 3 ? 0.9 : pair.level === 2 ? 0.6 : pair.level === 1 ? 0.3 : 0;
   const shearHi = vws(lv[300].spd, lv[300].dir, lv[300].z, lv[200].spd, lv[200].dir, lv[200].z) ?? 0;
   const shearMid = vws(lv[500].spd, lv[500].dir, lv[500].z, lv[300].spd, lv[300].dir, lv[300].z) ?? 0;
   const jet = Math.max(lv[300].spd, lv[250].spd, lv[200].spd);
@@ -107,13 +112,14 @@ export function assessPoint(lv, ridgeBearing, pair, central) {
 }
 
 // Whole crest: points [{coord:[lon,lat], lv}], returns GeoJSON for the map plus a summary per band.
-export function assessCrest(samples, pair, centralLat = [-36.5, -30.5]) {
+// pairs: [{ lat:[south, north], scored, level, … }] from pressurePair results, matched to each sample by latitude.
+export function assessCrest(samples, pairs = []) {
   const feats = [], onset = [], ends = [], segs = [];
   for (let i = 0; i < samples.length; i++) {
     const s = samples[i], prev = samples[Math.max(0, i - 1)], next = samples[Math.min(samples.length - 1, i + 1)];
     const ridge = bearing(prev.coord, next.coord);
-    const central = s.coord[1] <= centralLat[1] && s.coord[1] >= centralLat[0];
-    segs.push({ ...s, ridge, a: assessPoint(s.lv, ridge, pair, central) });
+    const pair = pairs.find(p => p && s.coord[1] >= p.lat[0] && s.coord[1] <= p.lat[1]) || null;
+    segs.push({ ...s, ridge, a: assessPoint(s.lv, ridge, pair) });
   }
   const summary = {};
   for (const b of BANDS) summary[b.id] = { cat: 0, mog: 0, at: null };
@@ -128,26 +134,91 @@ export function assessCrest(samples, pair, centralLat = [-36.5, -30.5]) {
       const up = 10;                                           // onset slightly upwind of the crest
       const p0 = destination(p.coord, (p.a.windTo + 180) % 360, up), q0 = destination(q.coord, (q.a.windTo + 180) % 360, up);
       const p1 = destination(p.coord, p.a.windTo, reachP), q1 = destination(q.coord, q.a.windTo, reachQ);
-      const props = { band: b.id, cat, mog, cause: ra.cause, cross500: Math.max(p.a.cross500, q.a.cross500) };
+      const props = { band: b.id, cat, mog, cause: ra.cause, cross500: Math.max(Math.abs(p.a.cross500), Math.abs(q.a.cross500)), lat: p.coord[1] };
       feats.push({ type: 'Feature', properties: props, geometry: { type: 'Polygon', coordinates: [[p0, q0, q1, p1, p0]] } });
       onset.push({ type: 'Feature', properties: props, geometry: { type: 'LineString', coordinates: [p0, q0] } });
       ends.push({ type: 'Feature', properties: props, geometry: { type: 'LineString', coordinates: [p1, q1] } });
     }
   }
+  // join consecutive onset and end segments with the same band and category, so each stretch is one line (one label)
+  const join = list => {
+    const out = [];
+    for (const f of list) {
+      const last = out[out.length - 1], c = f.geometry.coordinates;
+      if (last && last.properties.band === f.properties.band && last.properties.cat === f.properties.cat) {
+        const lc = last.geometry.coordinates, end = lc[lc.length - 1];
+        if (Math.abs(end[0] - c[0][0]) < 1e-6 && Math.abs(end[1] - c[0][1]) < 1e-6) { lc.push(c[1]); last.properties.mog = Math.max(last.properties.mog, f.properties.mog); continue; }
+      }
+      out.push({ ...f, properties: { ...f.properties }, geometry: { type: 'LineString', coordinates: [...c] } });
+    }
+    return out;
+  };
+  const byBand = list => BANDS.flatMap(b => join(list.filter(f => f.properties.band === b.id)));
   return {
     model: MODEL_VERSION, summary, points: segs.map(s => ({ coord: s.coord, ...s.a })),
     areas: { type: 'FeatureCollection', features: feats },
-    onset: { type: 'FeatureCollection', features: onset },
-    ends: { type: 'FeatureCollection', features: ends },
+    onset: { type: 'FeatureCollection', features: byBand(onset) },
+    ends: { type: 'FeatureCollection', features: byBand(ends) },
   };
 }
 
 // sample the crest every `stepDeg` of latitude between two latitudes
-export function crestSamples(crestLine, from = -24, to = -50, stepDeg = 1) {
+export function crestSamples(crestLine, from = 11, to = -55, stepDeg = 1) {
   const pts = crestLine.geometry.coordinates, out = [];
   for (let lat = from; lat >= to; lat -= stepDeg) {
     let best = pts[0]; for (const p of pts) if (Math.abs(p[1] - lat) < Math.abs(best[1] - lat)) best = p;
     out.push(best);
   }
   return out;
+}
+
+// ---------- routes: where a route crosses the crest, and the risk along it ----------
+const toXYZ = ([lon, lat]) => { const a = rad(lat), b = rad(lon); return [Math.cos(a) * Math.cos(b), Math.cos(a) * Math.sin(b), Math.sin(a)]; };
+// great-circle points every ~stepNm between two positions
+export function greatCircle(p, q, stepNm = 20) {
+  const A = toXYZ(p), B = toXYZ(q), dot = Math.min(1, A[0] * B[0] + A[1] * B[1] + A[2] * B[2]), w = Math.acos(dot);
+  const n = Math.max(1, Math.ceil(w * R / NM / stepNm)), out = [];
+  for (let i = 0; i <= n; i++) {
+    const f = i / n, s1 = w ? Math.sin((1 - f) * w) / Math.sin(w) : 1 - f, s2 = w ? Math.sin(f * w) / Math.sin(w) : f;
+    const x = s1 * A[0] + s2 * B[0], y = s1 * A[1] + s2 * B[1], z = s1 * A[2] + s2 * B[2];
+    out.push([+deg(Math.atan2(y, x)).toFixed(4), +deg(Math.atan2(z, Math.hypot(x, y))).toFixed(4)]);
+  }
+  return out;
+}
+export function routeLine(points, stepNm = 20) {
+  const line = [];
+  for (let i = 0; i < points.length - 1; i++) { const seg = greatCircle(points[i], points[i + 1], stepNm); line.push(...(i ? seg.slice(1) : seg)); }
+  return line;
+}
+function segX(a, b, c, d) {   // intersection of segments ab and cd in lon/lat (fine at these scales), or null
+  const r = [b[0] - a[0], b[1] - a[1]], s = [d[0] - c[0], d[1] - c[1]], den = r[0] * s[1] - r[1] * s[0];
+  if (!den) return null;
+  const t = ((c[0] - a[0]) * s[1] - (c[1] - a[1]) * s[0]) / den, u = ((c[0] - a[0]) * r[1] - (c[1] - a[1]) * r[0]) / den;
+  return t >= 0 && t <= 1 && u >= 0 && u <= 1 ? { at: [a[0] + t * r[0], a[1] + t * r[1]], t } : null;
+}
+// every place a route line crosses the crest: [{ at:[lon,lat], index (route sample), elev_m }]
+export function crestCrossings(line, crest) {
+  const cs = crest.geometry.coordinates, el = crest.properties.elev_m || [], out = [];
+  for (let i = 0; i < line.length - 1; i++) for (let j = 0; j < cs.length - 1; j++) {
+    const x = segX(line[i], line[i + 1], cs[j], cs[j + 1]);
+    if (x) out.push({ at: x.at.map(v => +v.toFixed(3)), index: i, elev_m: Math.max(el[j] || 0, el[j + 1] || 0) });
+  }
+  return out;
+}
+function inRing(pt, ring) {
+  let c = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i], [xj, yj] = ring[j];
+    if ((yi > pt[1]) !== (yj > pt[1]) && pt[0] < (xj - xi) * (pt[1] - yi) / (yj - yi) + xi) c = !c;
+  }
+  return c;
+}
+// risk category per route sample for one band: the highest turbulence area the sample sits in
+export function routeRisk(line, areas, band) {
+  const polys = areas.features.filter(f => f.properties.band === band);
+  return line.map(pt => polys.reduce((m, f) => inRing(pt, f.geometry.coordinates[0]) ? Math.max(m, f.properties.cat) : m, 0));
+}
+export function nmBetween([lo1, la1], [lo2, la2]) {
+  const a = Math.sin(rad(la2 - la1) / 2) ** 2 + Math.cos(rad(la1)) * Math.cos(rad(la2)) * Math.sin(rad(lo2 - lo1) / 2) ** 2;
+  return 2 * 3440.065 * Math.asin(Math.sqrt(a));
 }

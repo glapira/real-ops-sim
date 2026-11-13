@@ -1,0 +1,10 @@
+{
+  "note": "Station pairs across the Andes: QNH west (Pacific side) minus QNH east. Only pairs with a published rule raise the score. High-altitude stations (Bolivian altiplano, Peruvian sierra) are left out: their QNH is reduced from 3,000–4,000 m and does not compare with a coastal QNH.",
+  "pairs": [
+    { "id": "north-chile", "west": "SCFA", "east": "SASA", "lat": [-26.0, -21.5], "name": "Antofagasta – Salta", "rule": null },
+    { "id": "central", "west": "SCEL", "east": "SAME", "lat": [-36.5, -30.5], "name": "Santiago – Mendoza",
+      "rule": "Pilot rule of thumb: Santiago QNH 8–12 hPa or more above Mendoza, or Mendoza 5 °C or more warmer (Aviación Global; not confirmed by an official source)" },
+    { "id": "south-central", "west": "SCIE", "east": "SAZN", "lat": [-39.0, -36.5], "name": "Concepción – Neuquén", "rule": null },
+    { "id": "north-patagonia", "west": "SCTE", "east": "SAZS", "lat": [-43.0, -39.0], "name": "Puerto Montt – Bariloche", "rule": null }
+  ]
+}

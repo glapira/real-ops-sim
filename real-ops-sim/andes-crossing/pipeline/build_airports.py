@@ -7,6 +7,7 @@ import csv, json, sys
 
 SA = {'AR', 'CL', 'PE', 'BO', 'UY', 'PY', 'BR', 'EC', 'CO', 'VE', 'GY', 'SR', 'GF', 'FK'}
 ANDES = {'AR', 'CL', 'PE', 'BO'}
+EXTRA = set()   # aerodromes outside the continent list (none: the bases are SABE and SAEZ)
 air_csv, nav_csv, out = sys.argv[1:4]
 
 def num(v):
@@ -16,9 +17,12 @@ def num(v):
 feats = []
 for r in csv.DictReader(open(air_csv, encoding='utf-8')):
     c = r['iso_country']
-    if c not in SA or r['type'] not in ('large_airport', 'medium_airport'): continue
+    if r['ident'] in EXTRA:
+        pass
+    elif c not in SA or r['type'] not in ('large_airport', 'medium_airport'): continue
     icao = r.get('icao_code') or (r['ident'] if len(r['ident']) == 4 and r['ident'].isalpha() else '')
     if not icao: continue
+    if r['ident'] in EXTRA and r['type'] not in ('large_airport', 'medium_airport'): continue
     sched = r['scheduled_service'] == 'yes'
     rank = 1 if r['type'] == 'large_airport' else 2 if sched else 3
     if rank == 3 and c not in ('AR', 'CL'): continue

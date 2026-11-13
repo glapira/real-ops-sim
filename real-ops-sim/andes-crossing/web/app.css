@@ -1,0 +1,142 @@
+/* Andes Crossing · app components (.ac-*), built only from kit roles and andes.css tokens (DESIGN §0, §4, §6). */
+html, body { margin: 0; height: 100%; background: var(--map-ocean); color: var(--ink); font: var(--t-body); overflow: hidden; }
+.k-app.ac-app { position: relative; height: 100dvh; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-areas: "detail"; }
+html:is([data-k-arr="A1b"], [data-k-arr="A2"], [data-k-arr="A3"], [data-k-arr="A4"]) .k-app.ac-app {
+  grid-template-columns: var(--k-list) minmax(0, 1fr); grid-template-areas: "list detail"; }
+.ac-app > .ac-stage { grid-column: 1 / -1; grid-row: 1; position: relative; overflow: hidden; }
+.ac-map { position: absolute; inset: 0; }
+.ac-map .maplibregl-ctrl-attrib { font: var(--t-caption); background: var(--glass-bg); color: var(--slate); }
+.ac-map .maplibregl-ctrl-attrib a { color: var(--slate); }
+
+/* ---- Panel: the list pane over the map when there is room; a bottom panel on one column ---- */
+.ac-panel { grid-row: 1; z-index: 10; margin: var(--s-3); border-radius: var(--r-sheet); display: flex; flex-direction: column;
+  min-height: 0; max-height: calc(100dvh - 2 * var(--s-3)); overflow: hidden; }
+html:is([data-k-arr="A1b"], [data-k-arr="A2"], [data-k-arr="A3"], [data-k-arr="A4"]) .ac-panel { grid-area: list; margin-top: calc(var(--sa-top) + var(--s-3)); }
+.ac-panel-head { padding: var(--s-3) var(--s-4) var(--s-2); }
+.ac-panel-body { overflow-y: auto; overscroll-behavior: contain; padding: 0 var(--s-4) var(--s-4); }
+.ac-grabber { display: none; }
+.ac-disclaimer { color: var(--slate); margin: var(--s-4) 0 0; }
+/* One column: interim non-modal bottom panel with three heights (peek / medium / large) until Kit.sheet gains
+   { modal: false, peek } (DESIGN §0). Same node as the pane, so tab and scroll survive a pose change. */
+html:not(:is([data-k-arr="A1b"], [data-k-arr="A2"], [data-k-arr="A3"], [data-k-arr="A4"])) .ac-panel {
+  position: fixed; left: 0; right: 0; bottom: 0; margin: 0; max-height: none; border-radius: var(--r-sheet) var(--r-sheet) 0 0;
+  height: var(--ac-sheet-h, calc(var(--ac-peek) + var(--sa-bottom))); padding-bottom: var(--sa-bottom);
+  transition: height var(--spring-sheet-dur) var(--spring-sheet); }
+html:not(:is([data-k-arr="A1b"], [data-k-arr="A2"], [data-k-arr="A3"], [data-k-arr="A4"])) .ac-grabber {
+  display: block; width: 36px; height: 5px; border-radius: 3px; background: var(--fill-3); margin: 6px auto 0; cursor: grab; }
+html.reduce-motion .ac-panel { transition: none; }
+
+/* ---- Top bar ---- */
+.ac-bar { position: absolute; z-index: 5; top: calc(var(--sa-top) + var(--s-3)); right: calc(var(--sa-right) + var(--s-3) + var(--hit) + var(--s-3));
+  left: var(--s-3); display: flex; gap: var(--s-2); align-items: flex-start; pointer-events: none; }
+html:is([data-k-arr="A1b"], [data-k-arr="A2"], [data-k-arr="A3"], [data-k-arr="A4"]) .ac-bar { left: calc(var(--k-list) + var(--s-4)); }
+.ac-bar > * { pointer-events: auto; }
+.ac-capsule { display: inline-flex; align-items: center; gap: var(--s-2); min-height: var(--hit); padding: 0 var(--s-4);
+  border-radius: var(--r-pill); color: var(--ink); font: var(--t-headline); cursor: pointer; }
+.ac-capsule .k-figure { letter-spacing: .02em; }
+.ac-capsule-sub { color: var(--slate); font: var(--t-subhead); }
+.ac-status { display: flex; flex-wrap: wrap; gap: var(--s-2); }
+.ac-status .k-chip { font: var(--t-caption); }
+
+/* ---- Map buttons ---- */
+.ac-mapbtns { position: absolute; z-index: 5; top: calc(var(--sa-top) + var(--s-3)); right: calc(var(--sa-right) + var(--s-3));
+  display: flex; flex-direction: column; border-radius: var(--r-card); overflow: hidden; }
+.ac-mapbtns .k-btn { border-radius: 0; color: var(--ink); background: none; }
+.ac-mapbtns .k-btn + .k-btn { border-top: .5px solid var(--sep); }
+.ac-mapbtns .k-btn[aria-pressed="true"] { color: var(--tint); background: var(--tint-soft); }
+.ac-btn-word { font: var(--t-bar-word); font-weight: 700; font-size: 13px; }
+
+/* ---- Level slider (vertical, one stop per level) ---- */
+.ac-fl { position: absolute; z-index: 5; right: calc(var(--sa-right) + var(--s-3)); top: 50%; transform: translateY(-40%);
+  width: max(var(--ac-fl-w), 5.25rem); border-radius: var(--r-card); padding: var(--s-2) 0; display: flex; flex-direction: column; }
+.ac-fl-stop { all: unset; box-sizing: border-box; display: flex; align-items: center; justify-content: space-between; gap: 4px;
+  height: var(--ac-fl-step); padding: 0 8px; cursor: pointer; font: var(--t-bar-word); color: var(--slate); border-radius: var(--r-small); margin: 0 4px; }
+.ac-fl-stop[aria-checked="true"] { background: var(--card); color: var(--ink); box-shadow: var(--e-1); font-weight: 700; }
+.ac-fl-stop:focus-visible { outline: 2px solid var(--tint); }
+.ac-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; background: transparent; box-shadow: inset 0 0 0 1.25px var(--risk-nil); }
+.ac-dot[data-cat="1"] { background: var(--risk-light); box-shadow: none; }
+.ac-dot[data-cat="2"] { background: var(--risk-moderate); box-shadow: none; }
+.ac-dot[data-cat="3"] { background: var(--risk-severe); box-shadow: none; }
+html:not(:is([data-k-arr="A1b"], [data-k-arr="A2"], [data-k-arr="A3"], [data-k-arr="A4"])) .ac-fl { top: calc(var(--sa-top) + var(--s-3) + 4 * var(--hit) + var(--s-4)); transform: none; }
+
+/* ---- Bottom: legend and time scrubber ---- */
+.ac-bottom { position: absolute; z-index: 5; left: var(--s-3); right: calc(var(--sa-right) + var(--s-3)); bottom: calc(var(--sa-bottom) + var(--s-3));
+  display: flex; flex-direction: column; align-items: flex-start; gap: var(--s-2); pointer-events: none; }
+html:is([data-k-arr="A1b"], [data-k-arr="A2"], [data-k-arr="A3"], [data-k-arr="A4"]) .ac-bottom { left: calc(var(--k-list) + var(--s-4)); }
+html:not(:is([data-k-arr="A1b"], [data-k-arr="A2"], [data-k-arr="A3"], [data-k-arr="A4"])) .ac-bottom { bottom: calc(var(--ac-sheet-h, calc(var(--ac-peek) + var(--sa-bottom))) + var(--s-2)); }
+.ac-bottom > * { pointer-events: auto; }
+.ac-legend { display: inline-flex; align-items: center; gap: var(--s-2); min-height: 1.75rem; padding: 0 var(--s-3); border-radius: var(--r-pill); font: var(--t-caption); color: var(--ink); }
+.ac-sw { display: inline-grid; place-items: center; width: 14px; height: 14px; border-radius: 3px; font: 700 9px/1 var(--font); }
+.ac-sw[data-cat="0"] { box-shadow: inset 0 0 0 1.25px var(--risk-nil); color: var(--risk-nil-on); }
+.ac-sw[data-cat="1"] { background: var(--risk-light); color: var(--risk-light-on); }
+.ac-sw[data-cat="2"] { background: var(--risk-moderate); color: var(--risk-moderate-on); }
+.ac-sw[data-cat="3"] { background: var(--risk-severe); color: var(--risk-severe-on);
+  background-image: repeating-linear-gradient(45deg, var(--risk-hatch) 0 1px, transparent 1px 5px); }
+.ac-scrub { display: flex; align-items: stretch; max-width: min(720px, 100%); overflow-x: auto; scrollbar-width: none; border-radius: var(--r-card); padding: 4px; }
+.ac-scrub::-webkit-scrollbar { display: none; }
+.ac-cell { all: unset; box-sizing: border-box; flex: none; width: var(--ac-scrub-cell); min-height: var(--hit); display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 3px; border-radius: var(--r-small); cursor: pointer; font: var(--t-subhead); color: var(--ink); font-variant-numeric: tabular-nums; }
+.ac-cell small { font: var(--t-bar-word); color: var(--slate); }
+.ac-cell[aria-checked="true"] { background: var(--fill-3); font-weight: 600; }
+.ac-cell:focus-visible { outline: 2px solid var(--tint); }
+.ac-bar4 { width: 70%; height: 4px; border-radius: 2px; background: var(--fill); }
+.ac-bar4[data-cat="1"] { background: var(--risk-light); } .ac-bar4[data-cat="2"] { background: var(--risk-moderate); } .ac-bar4[data-cat="3"] { background: var(--risk-severe); }
+
+/* ---- Crossing card ---- */
+.ac-card-head { color: var(--slate); font: var(--t-subhead); margin: var(--s-2) 0 0; overflow-wrap: anywhere; }
+.ac-verdict { display: flex; align-items: center; gap: var(--s-3); margin: var(--s-3) 0 var(--s-1); font: var(--t-title2); }
+.ac-verdict .ac-sw { width: 22px; height: 22px; font-size: 12px; border-radius: 5px; }
+.ac-conf { display: flex; align-items: center; gap: var(--s-2); color: var(--slate); font: var(--t-subhead); }
+.ac-bars3 { display: inline-flex; align-items: flex-end; gap: 2px; }
+.ac-bars3 i { width: 4px; border-radius: 1px; background: var(--conf-bar-off); }
+.ac-bars3 i:nth-child(1) { height: 6px; } .ac-bars3 i:nth-child(2) { height: 9px; } .ac-bars3 i:nth-child(3) { height: 12px; }
+.ac-bars3 i.on { background: var(--conf-bar-on); }
+.ac-probs { display: grid; grid-template-columns: auto 1fr auto; gap: 6px var(--s-3); align-items: center; margin: var(--s-4) 0; font: var(--t-subhead); }
+.ac-prob { height: 6px; border-radius: 3px; background: var(--fill); overflow: hidden; }
+.ac-prob > i { display: block; height: 100%; border-radius: 3px; }
+.ac-pairs { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-3) var(--s-4); margin: var(--s-3) 0; }
+.ac-pair dt { color: var(--slate); font: var(--t-footnote); } .ac-pair dd { margin: 2px 0 0; font: var(--t-headline); font-variant-numeric: tabular-nums; }
+html.ax .ac-pairs { grid-template-columns: 1fr; }
+.ac-stamp { color: var(--slate); font: var(--t-footnote); font-variant-numeric: tabular-nums; margin: var(--s-2) 0 0; }
+.ac-section-title { font: var(--t-headline); margin: var(--s-5) 0 var(--s-2); }
+.ac-mono { font-family: var(--ac-font-mono); font-size: .8125rem; color: var(--slate); white-space: pre-wrap; word-break: break-word; }
+.ac-row { display: flex; align-items: center; justify-content: space-between; gap: var(--s-3); padding: var(--s-3) 0; border-bottom: .5px solid var(--sep); }
+.ac-row:last-child { border-bottom: 0; }
+.ac-row-main { min-width: 0; } .ac-row-sub { color: var(--slate); font: var(--t-footnote); }
+
+/* ---- Gauge (pressure pair) ---- */
+.ac-gauge svg { width: 100%; height: auto; display: block; }
+.ac-gauge text { font: 600 10px var(--font); fill: var(--slate); }
+.ac-tiles { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-3); margin: var(--s-3) 0; }
+.ac-tile { background: var(--fill-2); border-radius: var(--r-card); padding: var(--s-3); }
+.ac-tile b { display: block; font: var(--t-title2); font-variant-numeric: tabular-nums; }
+.ac-tile span { color: var(--slate); font: var(--t-footnote); }
+
+/* ---- Report form ---- */
+.ac-form { display: grid; gap: var(--s-3); }
+.ac-form label { display: grid; gap: 4px; font: var(--t-footnote); color: var(--slate); }
+.ac-form :is(input, select, textarea) { font: var(--t-body); color: var(--ink); background: var(--fill-2); border: 0; border-radius: var(--r-field);
+  min-height: var(--hit); padding: 0 var(--s-3); box-sizing: border-box; width: 100%; }
+.ac-form textarea { padding: var(--s-2) var(--s-3); min-height: 5rem; resize: vertical; }
+.ac-form .k-seg { width: 100%; }
+.ac-two { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s-3); }
+
+/* ---- Layers card, airport popover ---- */
+.ac-card { padding: var(--s-3); min-width: 280px; max-width: 360px; }
+.ac-card .k-group { margin-bottom: var(--s-4); }
+.ac-card .k-row { display: flex; justify-content: space-between; align-items: center; min-height: var(--hit); }
+.ac-offline-btn { margin-top: var(--s-3); width: 100%; }
+.maplibregl-popup-content { background: var(--card); color: var(--ink); border-radius: var(--r-card); box-shadow: var(--e-2); padding: var(--s-3) var(--s-4); font: var(--t-subhead); }
+.maplibregl-popup-tip { border-top-color: var(--card) !important; border-bottom-color: var(--card) !important; }
+.maplibregl-popup-close-button { color: var(--slate); font-size: 18px; padding: 2px 8px; }
+.ac-pop-icao { font: var(--t-title2); font-variant-numeric: tabular-nums; }
+
+/* ---- One column (phone portrait): the kit hides its list pane when the detail has focus; this panel stays (DESIGN §4.2) ---- */
+html:not(:is([data-k-arr="A1b"], [data-k-arr="A2"], [data-k-arr="A3"], [data-k-arr="A4"])) .ac-app > .ac-panel { display: flex !important; visibility: visible !important; }
+.ac-peekline { display: none; align-items: center; gap: var(--s-2); padding: var(--s-2) var(--s-4) 0; font: var(--t-headline); }
+.ac-peekline .ac-sw { width: 18px; height: 18px; }
+.ac-peekline small { color: var(--slate); font: var(--t-footnote); margin-left: auto; }
+html:not(:is([data-k-arr="A1b"], [data-k-arr="A2"], [data-k-arr="A3"], [data-k-arr="A4"])) .ac-peekline { display: flex; }
+/* level slider as a chip: only the selected level until tapped; it collapses 3 s after the last touch */
+html:not(:is([data-k-arr="A1b"], [data-k-arr="A2"], [data-k-arr="A3"], [data-k-arr="A4"])) .ac-fl:not(.ac-open) .ac-fl-stop:not([aria-checked="true"]) { display: none; }
+html:not(:is([data-k-arr="A1b"], [data-k-arr="A2"], [data-k-arr="A3"], [data-k-arr="A4"])) .ac-fl { padding: 2px 0; }

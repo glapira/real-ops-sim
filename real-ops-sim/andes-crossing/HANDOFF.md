@@ -20,9 +20,10 @@ Three jobs need your Mac: a browser with your logins, the Outlook attachments, a
 ### Job 1: airways across the Andes → `web/data/airways.json`
 
 Source: ForeFlight Dispatch or Navigraph Charts in Chrome (logged in), reference use only.
-Scope: every published ATS route (upper and lower, RNAV and conventional) that crosses or touches the Andes between
-15°S and 55°S, in the Santiago, Antofagasta, Puerto Montt, Punta Arenas, Mendoza, Córdoba, Resistencia, Comodoro Rivadavia,
-Lima and La Paz FIRs, plus the short connectors into SCEL, SAME, SACO, SANT, SASA, SAZN, SAZS, SCTE, SCFA, SPJC, SLLP.
+Scope: every published ATS route (upper and lower, RNAV and conventional) that crosses or runs along the Andes, the whole
+range from Venezuela and Colombia to Tierra del Fuego (about 11°N to 55°S): the Bogotá, Barranquilla, Guayaquil, Lima,
+La Paz, Antofagasta, Santiago, Puerto Montt, Punta Arenas, Resistencia, Córdoba, Mendoza and Comodoro Rivadavia FIRs.
+Include the routes the operator flies from the bases SABE and SAEZ toward Chile, Peru, Colombia and North America.
 
 Format (GeoJSON FeatureCollection, one Feature per airway, LineString in route order):
 `{"type":"Feature","properties":{"ident":"UL780","level":"upper|lower|both","rnav":true,"fixes":["AAAAA","BBBBB"],"mea_ft":[...],"source":"ForeFlight Dispatch, cycle 2611"},"geometry":{"type":"LineString","coordinates":[[lon,lat],...]}}`
@@ -42,6 +43,6 @@ Format: `docs/escape-routes-schema.md`. Copy everything exactly as printed. Add 
 Upload `andes-crossing/web/` to a new folder on the avitrainsolutions.com hosting, next to `aeroledger/`
 (suggested `public_html/andes/`, so the app lives at https://avitrainsolutions.com/andes/). No login for now.
 The app links the shared kit at `/solidaire/shared/kit/` that is already on the server.
-Make `web/api/cache/` and `web/api/store/` writable by PHP. Check https://avitrainsolutions.com/andes/api/metar.php?ids=SCEL,SAME
+Make `web/api/cache/` and `web/api/store/` writable by PHP (the endpoints use PHP's curl extension, or streams as a fallback). Check https://avitrainsolutions.com/andes/api/metar.php?ids=SCEL,SAME
 returns JSON. Then add the GitHub Actions workflow in `deploy/` with the FTP secrets (FTP_SERVER, FTP_USERNAME, FTP_PASSWORD)
 set in the repository settings, so the WAFS job can upload every 6 hours.
