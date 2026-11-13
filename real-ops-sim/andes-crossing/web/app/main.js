@@ -410,9 +410,10 @@ function wireUi() {
   segInit(themeSeg, v => { document.documentElement.setAttribute('data-theme', v); try { localStorage.setItem('solidaire.theme', v); } catch {} applyTheme(map, S.base); });
   $('#btnOffline').onclick = saveOffline;
   map.on('click', 'airport', e => airportPopup(e.features[0]));
+  map.on('click', 'airport-label', e => airportPopup(e.features[0]));
   map.on('click', 'turb-fill', e => { const p = e.features[0].properties; new maplibregl.Popup({ closeButton: true }).setLngLat(e.lngLat)
     .setHTML(`<b>${CAT_WORD[p.cat]}</b> · FL band ${bandOf(S.fl) === 'low' ? '100–200' : bandOf(S.fl) === 'mid' ? '200–300' : '300–450'}<br>Moderate-or-worse ${p.mog}% (uncalibrated)<br>500 hPa across range ${p.cross500} kt`).addTo(map); });
-  for (const id of ['airport', 'turb-fill']) { map.on('mouseenter', id, () => map.getCanvas().style.cursor = 'pointer'); map.on('mouseleave', id, () => map.getCanvas().style.cursor = ''); }
+  for (const id of ['airport', 'airport-label', 'turb-fill']) { map.on('mouseenter', id, () => map.getCanvas().style.cursor = 'pointer'); map.on('mouseleave', id, () => map.getCanvas().style.cursor = ''); }
   // one-column bottom panel: tap the grabber to step peek → medium → large
   const heights = ['calc(var(--ac-peek) + var(--sa-bottom))', '50dvh', 'calc(100dvh - var(--sa-top) - 56px)']; let hi = 0;
   $('.ac-grabber').onclick = () => { hi = (hi + 1) % 3; document.documentElement.style.setProperty('--ac-sheet-h', heights[hi]); };
@@ -431,12 +432,63 @@ function segInit(el, onChange) {
   el.querySelectorAll('.k-seg-item').forEach(b => b.addEventListener('click', () => {
     el.querySelectorAll('.k-seg-item').forEach(n => n.setAttribute('aria-checked', String(n === b))); onChange && onChange(b.value); }));
 }
-async function airportPopup(f) {
-  const p = f.properties, pop = new maplibregl.Popup({ maxWidth: '300px' }).setLngLat(f.geometry.coordinates)
-    .setHTML(`<div class="ac-pop-icao k-figure">${p.icao} <span style="color:var(--slate);font:var(--t-subhead)">${p.iata || ''}</span></div><div>${p.name}</div><div style="color:var(--slate)">${p.city || ''} · Elevation ${Number(p.elev_ft).toLocaleString()} ft</div><div id="popMetar" class="ac-stamp">Loading METAR…</div>`).addTo(map);
-  try { const r = await D.metars([p.icao]); const m = r.data[p.icao]; const el = document.getElementById('popMetar');
-    if (el) el.innerHTML = m ? `<b style="font:var(--t-title2);color:var(--ink)">${m.qnh} hPa</b> · ${m.temp}/${m.dew} °C · ${zTime(m.time)}<div class="ac-mono">${m.raw}</div>` : `No METAR for ${p.icao}.`;
-  } catch { const el = document.getElementById('popMetar'); if (el) el.textContent = 'METAR not available offline.'; }
+// ---------- airport weather: METAR and TAF (DESIGN §4.3 airport detail) ----------
+const fmtVis = v => v == null ? '—' : String(v).includes('+') ? '10 km or more' : (() => { const m = Number(v) * 1609.34; return m >= 9999 ? '10 km or more' : m >= 5000 ? (m / 1000).toFixed(0) + ' km' : (Math.round(m / 100) * 100).toLocaleString() + ' m'; })();
+const fmtWind = (d, s, g) => s == null ? '—' : s === 0 ? 'Calm' : `${d === 'VRB' || d == null ? 'VRB' : String(d).padStart(3, '0') + '°'} / ${s}${g ? 'G' + g : ''} kt`;
+const fmtClouds = cs => !cs?.length ? '—' : cs.map(c => c.base != null ? `${c.cover} ${String(Math.round(c.base / 100)).padStart(3, '0')}${c.type || ''}` : c.cover).join(' ');
+const zDay = sec => { const d = new Date(sec * 1000); return `${String(d.getUTCDate()).padStart(2, '0')}/${String(d.getUTCHours()).padStart(2, '0')}${String(d.getUTCMinutes()).padStart(2, '0')}Z`; };
+const ageMin = iso => Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+function airportCard(p) {
+  const card = h('div', { class: 'ac-card ac-apt' },
+    h('div', { class: 'ac-apt-head' }, h('span', { class: 'ac-pop-icao k-figure' }, p.icao), p.iata ? h('span', { class: 'ac-row-sub' }, p.iata) : null, h('span', { class: 'k-chip ac-cat', hidden: true })),
+    h('div', { class: 'k-headline' }, p.name), h('div', { class: 'ac-row-sub' }, `${p.city || ''} · Elevation ${Number(p.elev_ft).toLocaleString()} ft`),
+    h('h3', { class: 'ac-section-title' }, 'METAR'), h('div', { class: 'ac-metar' }, h('div', { class: 'k-bone', style: 'height:4rem;border-radius:var(--r-small)' })),
+    h('h3', { class: 'ac-section-title' }, 'TAF'), h('div', { class: 'ac-taf' }, h('div', { class: 'k-bone', style: 'height:6rem;border-radius:var(--r-small)' })),
+    h('div', { class: 'ac-apt-actions' },
+      h('button', { class: 'k-btn k-btn-tinted', type: 'button', onclick: () => setEnd(p.icao, 0) }, 'Set as departure'),
+      h('button', { class: 'k-btn k-btn-tinted', type: 'button', onclick: () => setEnd(p.icao, 1) }, 'Set as destination')));
+  D.metars([p.icao]).then(r => {
+    const m = r.data[p.icao], box = card.querySelector('.ac-metar'); box.replaceChildren();
+    if (!m) { box.append(h('p', { class: 'k-subhead' }, `No METAR for ${p.icao}.`)); return; }
+    const age = ageMin(m.time), old = age > 90;
+    if (m.cat) { const c = card.querySelector('.ac-cat'); c.hidden = false; c.textContent = m.cat; }
+    box.append(h('div', { class: 'ac-apt-qnh' }, h('b', { class: 'k-figure', style: old ? 'color:var(--slate)' : '' }, `${m.qnh} hPa`),
+      h('span', { class: old ? 'k-chip' : 'ac-row-sub k-figure' }, `${zTime(m.time)} · ${old ? 'Old · ' : ''}${age < 120 ? age + ' min' : Math.floor(age / 60) + ' h ' + age % 60 + ' min'} ago`)),
+      h('dl', { class: 'ac-pairs' }, pairItem('Wind', fmtWind(m.wdir, m.wspd, m.wgst)), pairItem('Visibility', fmtVis(m.vis)),
+        pairItem('Cloud', / CAVOK /.test(m.raw || '') ? 'CAVOK' : fmtClouds(m.clouds)), pairItem('Temp / dew', `${m.temp} / ${m.dew} °C`), m.wx ? pairItem('Weather', m.wx) : null),
+      h('p', { class: 'ac-mono' }, m.raw));
+  }).catch(() => { const box = card.querySelector('.ac-metar'); box.replaceChildren(h('p', { class: 'k-subhead' }, 'METAR not available offline.')); });
+  D.taf(p.icao).then(r => {
+    const t = r.data, box = card.querySelector('.ac-taf'); box.replaceChildren();
+    if (!t) { box.append(h('p', { class: 'k-subhead' }, `No TAF for ${p.icao}.`)); return; }
+    box.append(h('p', { class: 'ac-row-sub k-figure' }, `Issued ${zTime(t.issued)} · valid ${zDay(t.from)}–${zDay(t.to)}`));
+    for (const f of t.periods) {
+      const tag = f.change === 'BASE' ? 'From' : f.change === 'PROB' || f.prob ? `PROB${f.prob || ''}${f.change && f.change !== 'PROB' ? ' ' + f.change : ''}` : f.change;
+      box.append(h('div', { class: 'ac-taf-row' }, h('span', { class: 'ac-taf-tag k-figure' }, tag), h('span', { class: 'ac-taf-time k-figure' }, `${zDay(f.from)}–${zDay(f.to)}`),
+        h('span', { class: 'ac-taf-body' }, [f.wspd != null ? fmtWind(f.wdir, f.wspd, f.wgst) : null, f.vis != null ? fmtVis(f.vis) : null, f.wx, f.clouds.length ? fmtClouds(f.clouds) : null, f.vv ? `VV${String(f.vv / 100).padStart(3, '0')}` : null].filter(Boolean).join(' · ') || 'No change listed')));
+    }
+    box.append(h('p', { class: 'ac-mono' }, t.raw));
+  }).catch(() => { const box = card.querySelector('.ac-taf'); box.replaceChildren(h('p', { class: 'k-subhead' }, 'TAF not available offline.')); });
+  return card;
+}
+function setEnd(icao, which) {
+  const ids = S.route ? S.route.split(' → ') : [];
+  if (which === 0) ids[0] = icao; else { if (!ids.length) ids.push(''); ids[Math.max(1, ids.length - 1)] = icao; }
+  planRoute(ids.filter(Boolean).join(' '));
+  document.querySelector('.k-pop-catcher')?.click(); aptPopup?.remove();
+}
+let aptPopup = null, aptAnchor = null;
+function airportPopup(f) {
+  const p = f.properties, card = airportCard(p), k = Kit(), pt = map.project(f.geometry.coordinates);
+  aptPopup?.remove();
+  if (k?.pop) {
+    aptAnchor?.remove();
+    aptAnchor = h('div', { style: `position:absolute;left:${pt.x}px;top:${pt.y}px;width:1px;height:1px;pointer-events:none`, 'aria-hidden': 'true' });
+    $('.ac-stage').append(aptAnchor);
+    k.pop(card, { anchor: aptAnchor, title: `${p.icao} weather`, onClose: () => { aptAnchor?.remove(); aptAnchor = null; } });
+  } else {
+    aptPopup = new maplibregl.Popup({ maxWidth: '360px' }).setLngLat(f.geometry.coordinates).setDOMContent(card).addTo(map);
+  }
 }
 function fitCoords(cs) { const b = cs.reduce((bb, c) => bb.extend(c), new maplibregl.LngLatBounds(cs[0], cs[0])); map.fitBounds(b, { padding: 80, pitch: 0, bearing: 0, duration: reduceMotion() ? 0 : 600 }); }
 function fitFeature(f) { fitCoords(f.geometry.coordinates[0]); }

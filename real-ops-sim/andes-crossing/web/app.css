@@ -140,3 +140,16 @@ html:not(:is([data-k-arr="A1b"], [data-k-arr="A2"], [data-k-arr="A3"], [data-k-a
 /* level slider as a chip: only the selected level until tapped; it collapses 3 s after the last touch */
 html:not(:is([data-k-arr="A1b"], [data-k-arr="A2"], [data-k-arr="A3"], [data-k-arr="A4"])) .ac-fl:not(.ac-open) .ac-fl-stop:not([aria-checked="true"]) { display: none; }
 html:not(:is([data-k-arr="A1b"], [data-k-arr="A2"], [data-k-arr="A3"], [data-k-arr="A4"])) .ac-fl { padding: 2px 0; }
+
+/* ---- Airport weather card ---- */
+.ac-apt { width: min(380px, 100%); box-sizing: border-box; max-height: min(70dvh, 640px); overflow-y: auto; overscroll-behavior: contain; }
+.ac-apt-head { display: flex; align-items: baseline; gap: var(--s-2); }
+.ac-apt-head .ac-cat { margin-left: auto; font: var(--t-caption); }
+.ac-apt-qnh { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s-3); margin-bottom: var(--s-2); }
+.ac-apt-qnh b { font: var(--t-title2); font-variant-numeric: tabular-nums; }
+.ac-taf-row { display: grid; grid-template-columns: 4.5rem 1fr; gap: 2px var(--s-3); padding: var(--s-2) 0; border-bottom: .5px solid var(--sep); }
+.ac-taf-tag { font: var(--t-footnote); font-weight: 600; }
+.ac-taf-time { font: var(--t-footnote); color: var(--slate); }
+.ac-taf-body { grid-column: 1 / -1; font: var(--t-subhead); }
+.ac-apt-actions { display: flex; gap: var(--s-2); flex-wrap: wrap; margin-top: var(--s-4); }
+.ac-apt .ac-mono { margin: var(--s-2) 0 0; }

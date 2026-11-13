@@ -29,9 +29,17 @@ export async function metars(ids) {
   for (const m of r.data || []) {
     if (by[m.icaoId] && by[m.icaoId].obsTime >= m.obsTime) continue;   // keep the latest per station
     by[m.icaoId] = { qnh: m.altim, temp: m.temp, dew: m.dewp, wdir: m.wdir, wspd: m.wspd, wgst: m.wgst,
-      raw: m.rawOb, obsTime: m.obsTime, time: m.reportTime };
+      vis: m.visib, clouds: m.clouds || [], wx: m.wxString, cat: m.fltCat, raw: m.rawOb, obsTime: m.obsTime, time: m.reportTime };
   }
   return { ...r, data: by };
+}
+
+export async function taf(id) {
+  const r = await getJSON('api/taf.php?ids=' + id, 'ac.taf.' + id, 10 * 60e3);
+  const t = (r.data || []).find(x => x.icaoId === id) || null;
+  return { ...r, data: t && { raw: t.rawTAF, issued: t.issueTime, from: t.validTimeFrom, to: t.validTimeTo,
+    periods: (t.fcsts || []).map(f => ({ change: f.fcstChange || 'BASE', prob: f.probability, from: f.timeFrom, to: f.timeTo,
+      wdir: f.wdir, wspd: f.wspd, wgst: f.wgst, vis: f.visib, wx: f.wxString, clouds: f.clouds || [], vv: f.vertVis })) } };
 }
 
 export async function sigmets() {
