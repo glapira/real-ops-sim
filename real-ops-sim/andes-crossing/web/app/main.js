@@ -2,6 +2,7 @@
 // (live when online, refreshed every 15 min). Crew reports close the loop. Reference only, not for navigation.
 import * as E from './engine.js';
 import * as D from './data.js';
+import * as X from './escape.js';
 import { buildStyle, addImages, applyTheme, tokens } from './map-style.js';
 import * as Scene from './scene3d.js';   // 3D scene: turbulence volumes, onset curtain, route ribbon (hooks marked "3D scene")
 
@@ -37,7 +38,9 @@ boot().catch(err => { console.error(err); status('Could not start the map.', 're
 async function boot() {
   const [base, airports, navaids, crest, airways, escape, pairs] = await Promise.all(
     ['basemap', 'airports', 'navaids', 'crest', 'airways', 'escape-routes', 'pressure-pairs'].map(n => D.staticData(n).catch(() => null)));
-  S.base = base; S.airports = airports; S.escape = escape; S.crest = crest; S.pairCfg = pairs?.pairs || [];
+  // the operator's escape routes live only on the server (escape-routes.local.json, never in the public repo)
+  const local = await D.staticData('escape-routes.local').catch(() => null);
+  S.base = base; S.airports = airports; S.escape = local?.routes?.length ? local : escape; S.escSel = localStorage.getItem('ac.escSel') || null; S.crest = crest; S.pairCfg = pairs?.pairs || [];
   const hubs = new Set(['SABE', 'SAEZ']);   // the operator's bases
   airports.features.forEach(f => { const p = f.properties; p.tier = hubs.has(p.icao) ? 1 : p.rank <= 2 ? 2 : 3; p.short = (p.city || p.name || '').slice(0, 22); });
 
@@ -295,43 +298,65 @@ function renderCrossing() {
 const pairItem = (k, v) => h('div', { class: 'ac-pair' }, h('dt', {}, k), h('dd', { class: 'k-figure' }, v));
 
 // ---------- escape routes + own position ----------
+// What to do on each stretch, in colour: the stretch, its escape path and the escape airport share one colour.
+let ESC = null;
 function drawEscape() {
-  const lines = [], pts = [];
-  for (const r of S.escape?.routes || []) {
-    if (r.aircraft && r.aircraft !== S.aircraft) continue;
-    lines.push({ type: 'Feature', properties: { id: r.id, kind: 'main', chart: r.chart }, geometry: { type: 'LineString', coordinates: r.points.map(p => [p.lon, p.lat]) } });
-    r.points.forEach(p => pts.push({ type: 'Feature', properties: { ident: p.ident, role: p.role || '' }, geometry: { type: 'Point', coordinates: [p.lon, p.lat] } }));
-    for (const b of r.branches || []) lines.push({ type: 'Feature', properties: { id: r.id, kind: 'branch', label: b.label }, geometry: { type: 'LineString', coordinates: b.points.map(p => [p.lon, p.lat]) } });
-  }
-  map.getSource('escape').setData({ type: 'FeatureCollection', features: lines });
-  map.getSource('escape-pts').setData({ type: 'FeatureCollection', features: pts });
+  ESC = X.toGeoJSON(S.escape, S.aircraft, S.escSel);
+  if (ESC.selected) { S.escSel = ESC.selected.id; try { localStorage.setItem('ac.escSel', S.escSel); } catch {} }
+  map.getSource('esc-seg').setData(ESC.segments); map.getSource('esc-branch').setData(ESC.branches);
+  map.getSource('esc-apt').setData(ESC.airports); map.getSource('esc-dp').setData(ESC.decisions);
 }
+const escColor = c => c >= 0 ? `var(${X.ESC_TOKENS[c]})` : 'var(--slate)';
+const dirWord = d => d === 'EB' ? 'Eastbound' : d === 'WB' ? 'Westbound' : d;
 function renderEscapeTab() {
   const box = $('.ac-tab[data-tab="escape"]'); box.replaceChildren();
   box.append(h('div', { class: 'k-seg', id: 'acftSeg' }, h('button', { class: 'k-seg-item', value: 'B788', 'aria-checked': String(S.aircraft === 'B788') }, '787-8'),
     h('button', { class: 'k-seg-item', value: 'GL8T', 'aria-checked': String(S.aircraft === 'GL8T') }, 'Global 8000')));
-  segInit($('#acftSeg', box), v => { S.aircraft = v; localStorage.setItem('ac.acft', v); $('#acftText').textContent = v === 'B788' ? '787-8' : 'Global 8000'; drawEscape(); renderEscapeTab(); });
-  const routes = (S.escape?.routes || []).filter(r => !r.aircraft || r.aircraft === S.aircraft);
+  segInit($('#acftSeg', box), v => { S.aircraft = v; localStorage.setItem('ac.acft', v); $('#acftText').textContent = v === 'B788' ? '787-8' : 'Global 8000'; S.escSel = null; drawEscape(); renderEscapeTab(); });
+  const routes = X.routesFor(S.escape, S.aircraft);
   if (!routes.length) {
-    box.append(h('p', { class: 'k-subhead' }, 'The escape routes load from the final Jeppesen ANDES charts, expected 16–19 Nov, effective with the 27 Nov revision.'));
-    box.append(h('p', { class: 'ac-stamp' }, 'They are kept on this device for offline use once loaded.'));
+    box.append(h('p', { class: 'k-subhead' }, 'No escape routes on this device yet. They load from the server once and then work offline.'));
+  } else {
+    box.append(h('div', { class: 'k-chips ac-esc-chips' }, ...routes.map(r => h('button', { class: 'k-chip', type: 'button', 'aria-pressed': String(r.id === S.escSel),
+      onclick: () => { S.escSel = r.id; drawEscape(); renderEscapeTab(); fitCoords(r.points.map(p => [p.lon, p.lat]).concat(ESC.airports.features.map(f => f.geometry.coordinates))); } },
+      `${r.chart} ${r.direction}`))));
   }
-  for (const r of routes) box.append(h('div', { class: 'ac-row' }, h('div', { class: 'ac-row-main' }, h('div', { class: 'k-headline' }, `${r.chart} · ${r.direction === 'EB' ? 'Eastbound' : 'Westbound'}`),
-    h('div', { class: 'ac-row-sub' }, r.points.map(p => p.ident).join(' · '))), h('button', { class: 'k-btn k-btn-plain', onclick: () => fitCoords(r.points.map(p => [p.lon, p.lat])) }, 'Show')));
+  const r = ESC?.selected;
+  if (r) {
+    if (S.gps) {
+      const ins = X.instruction(S.gps, ESC);
+      box.append(h('div', { class: 'ac-esc-now', style: ins && !ins.offRoute ? `--esc:${escColor(ins.color)}` : '' },
+        h('div', { class: 'ac-row-sub' }, 'Now'),
+        ins && !ins.offRoute ? [h('div', { class: 'k-title2' }, ins.airport ? `${ins.type === 'return' ? 'Return' : ins.type === 'continue' ? 'Continue' : 'Turn'} to ${ins.airport}` : 'Turn west to the coast'),
+          h('div', { class: 'k-subhead' }, `${ins.from} – ${ins.to} · ${ins.toNext} NM to ${ins.to}`)]
+          : h('div', { class: 'k-subhead' }, ins?.off != null ? `${ins.off} NM from ${r.chart}: off the charted route.` : 'Position not on this chart.')));
+    }
+    box.append(h('h3', { class: 'ac-section-title' }, `${r.chart} · ${dirWord(r.direction)} · ${r.aircraft === 'B788' ? '787-8' : 'Global 8000'}`));
+    for (const sg of r.segments) {
+      const a = sg.action || {}, c = ESC.colors[a.airport] ?? 5;
+      box.append(h('div', { class: 'ac-esc-seg', style: `--esc:${escColor(c)}` },
+        h('div', { class: 'ac-esc-head' }, h('span', { class: 'ac-esc-sw', 'aria-hidden': 'true' }), h('b', { class: 'k-figure' }, `${sg.from} – ${sg.to}`),
+          h('span', { class: 'ac-esc-to' }, a.airport ? `→ ${a.airport}${a.alternate ? ' / ' + a.alternate : ''}` : '→ coast')),
+        h('p', { class: 'k-subhead' }, a.text), a.levels ? h('p', { class: 'ac-row-sub k-figure' }, a.levels) : null));
+    }
+    for (const n of r.notes || []) box.append(h('p', { class: 'ac-stamp' }, n));
+    for (const q of r.questions || []) box.append(h('p', { class: 'ac-stamp' }, 'To confirm: ' + q));
+    box.append(h('p', { class: 'ac-stamp' }, `Proof chart ${r.proof_date}. Fix positions from the printed airway distances; dotted paths are schematic.`));
+  }
+  if (S.escape?.missing?.length) box.append(h('p', { class: 'ac-stamp' }, 'Missing: ' + S.escape.missing.join(' · ')));
   box.append(h('h3', { class: 'ac-section-title' }, 'Own position'));
   if (!S.gps) box.append(h('p', { class: 'k-subhead' }, S.watch ? 'Waiting for GPS…' : 'Turn on the position button on the map. On iPad it uses the device GPS (cellular models) or a connected GPS receiver.'));
   else {
-    const g = S.gps, near = nearestEscape(g);
+    const g = S.gps;
     box.append(h('dl', { class: 'ac-pairs' }, pairItem('Position', fmtPos(g.lat, g.lon)), pairItem('GPS altitude', g.alt != null ? Math.round(g.alt / 0.3048).toLocaleString() + ' ft' : '—'),
       pairItem('Track / speed', g.track != null ? `${Math.round(g.track)}°T / ${Math.round((g.speed || 0) * 1.94384)} kt` : '—'), pairItem('Accuracy', `±${Math.round(g.acc)} m`),
-      pairItem('Crest', `${Math.round(distToCrest(g))} NM`), pairItem('Nearest escape fix', near ? `${near.ident} · ${Math.round(near.nm)} NM` : '—')));
+      pairItem('Crest', `${Math.round(distToCrest(g))} NM`)));
     box.append(h('p', { class: 'ac-stamp' }, `GPS fix ${zTime(new Date(g.t).toISOString())}`));
   }
 }
 const fmtPos = (lat, lon) => `${Math.abs(lat).toFixed(2)}°${lat < 0 ? 'S' : 'N'} ${Math.abs(lon).toFixed(2)}°${lon < 0 ? 'W' : 'E'}`;
 function nmBetween([lo1, la1], [lo2, la2]) { const r = Math.PI / 180, a = Math.sin((la2 - la1) * r / 2) ** 2 + Math.cos(la1 * r) * Math.cos(la2 * r) * Math.sin((lo2 - lo1) * r / 2) ** 2; return 2 * 3440.065 * Math.asin(Math.sqrt(a)); }
 function distToCrest(g) { return Math.min(...S.crest.geometry.coordinates.map(c => nmBetween([g.lon, g.lat], c))); }
-function nearestEscape(g) { let best = null; for (const r of S.escape?.routes || []) for (const p of r.points) { const nm = nmBetween([g.lon, g.lat], [p.lon, p.lat]); if (!best || nm < best.nm) best = { ident: p.ident, nm }; } return best; }
 function toggleGps() {
   if (S.watch != null) { navigator.geolocation.clearWatch(S.watch); S.watch = null; S.gps = null; map.getSource('ownship').setData({ type: 'FeatureCollection', features: [] }); $('#btnGps').setAttribute('aria-pressed', 'false'); renderTab(); return; }
   if (!navigator.geolocation) { toast('This device has no position service.'); return; }
@@ -429,7 +454,7 @@ function setLayers() {
   const vis = (ids, on) => ids.forEach(id => map.getLayer(id) && map.setLayoutProperty(id, 'visibility', on ? 'visible' : 'none'));
   vis(['turb-fill', 'turb-hatch', 'turb-end', 'turb-onset-glow', 'turb-onset', 'turb-onset-label'], S.layers.turb);
   vis(['wafs-onset'], S.layers.wafs); vis(['sigmet-fill', 'sigmet-line', 'sigmet-label'], S.layers.sigmet);
-  vis(['escape-casing', 'escape-line', 'escape-branch', 'escape-pt', 'escape-pt-label'], S.layers.escape);
+  vis(['esc-other', 'esc-seg-casing', 'esc-seg', 'esc-branch', 'esc-branch-schematic', 'esc-branch-label', 'esc-apt', 'esc-dp'], S.layers.escape);
   vis(['airway-casing', 'airway', 'airway-label'], S.layers.airways); vis(['navaid'], S.layers.navaids); vis(['crest'], S.layers.crest);
   Scene.setLayers({ turb: S.layers.turb });   // 3D scene: after the flat layers, so it can hide the ones it replaces
 }

@@ -114,6 +114,6 @@
 html.reduce-motion { --ac-camera-open: 0ms; --ac-camera-move: 0ms; }
 
 /* ---- Escape-route actions (one colour per escape airport). Cool hues only: warm hues are reserved for turbulence. ---- */
-:root { --esc-1: #0A6CD6; --esc-2: #0E8C8C; --esc-3: #5856D6; --esc-4: #2F7FA6; --esc-5: #6E7FA3; --esc-6: #1C4E8A; }
-:root[data-theme="dark"] { --esc-1: #4DA3FF; --esc-2: #5FD4CF; --esc-3: #9D9BFF; --esc-4: #7CC8F2; --esc-5: #B8C4DC; --esc-6: #8FB8FF; }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --esc-1: #4DA3FF; --esc-2: #5FD4CF; --esc-3: #9D9BFF; --esc-4: #7CC8F2; --esc-5: #B8C4DC; --esc-6: #8FB8FF; } }
+:root { --esc-1: #0A6CD6; --esc-2: #0B8A7E; --esc-3: #7A4FD6; --esc-4: #5B6B82; --esc-5: #2F7FA6; --esc-6: #1C4E8A; }
+:root[data-theme="dark"] { --esc-1: #4DA3FF; --esc-2: #4FD8C4; --esc-3: #B79CFF; --esc-4: #D7DEE8; --esc-5: #7CC8F2; --esc-6: #8FB8FF; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --esc-1: #4DA3FF; --esc-2: #4FD8C4; --esc-3: #B79CFF; --esc-4: #D7DEE8; --esc-5: #7CC8F2; --esc-6: #8FB8FF; } }

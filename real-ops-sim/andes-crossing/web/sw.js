@@ -4,7 +4,7 @@ const V = 'ac-v1';
 const SHELL = ['./', 'index.html', 'app.css', 'app/main.js', 'app/engine.js', 'app/data.js', 'app/map-style.js', 'app/scene3d.js',
   'vendor/maplibre/maplibre-gl.js', 'vendor/maplibre/maplibre-gl.css',
   'data/basemap.json', 'data/airports.json', 'data/navaids.json', 'data/crest.json', 'data/airways.json',
-  'data/escape-routes.json', 'manifest.webmanifest'];
+  'data/escape-routes.json', 'data/escape-routes.local.json', 'app/escape.js', 'manifest.webmanifest'];
 const KIT = ['/solidaire/shared/kit/kit.css', '/solidaire/shared/kit/kit-components.css', '/solidaire/shared/kit/kit.js'];
 
 self.addEventListener('install', e => e.waitUntil((async () => {

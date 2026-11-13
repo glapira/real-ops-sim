@@ -1,5 +1,6 @@
 // Andes Crossing · map style (DESIGN.md §3). Colours come from the CSS tokens (andes.css over kit.css), read at build
 // time, so light, dark and Increase Contrast all follow the kit. The style stays portable to MapLibre Native.
+import { layers as escapeLayers, ESC_TOKENS } from './escape.js';
 const TERRARIUM = 'https://elevation-tiles-prod.s3.amazonaws.com/terrarium/{z}/{x}/{y}.png';
 const EMPTY = { type: 'FeatureCollection', features: [] };
 
@@ -18,7 +19,7 @@ export function tokens() {
     sky: v('--map-sky'), horizon: v('--map-horizon'), fog: v('--map-fog'), relief: v('--map-relief-high'),
     rLight: v('--risk-light'), rMod: v('--risk-moderate'), rSev: v('--risk-severe'), rExt: v('--risk-extreme'), rNil: v('--risk-nil'),
     fLight: num('--risk-fill-light', .4), fMod: num('--risk-fill-moderate', .5), fSev: num('--risk-fill-severe', .6),
-    hatch: v('--risk-hatch'), dark: document.documentElement.getAttribute('data-theme') === 'dark',
+    esc: ESC_TOKENS.map(v), hatch: v('--risk-hatch'), dark: document.documentElement.getAttribute('data-theme') === 'dark',
   };
 }
 
@@ -42,7 +43,7 @@ export function buildStyle(base, t = tokens()) {
       'wafs-onset': { type: 'geojson', data: EMPTY },
       sigmet: { type: 'geojson', data: EMPTY },
       airways: { type: 'geojson', data: EMPTY }, navaids: { type: 'geojson', data: EMPTY }, airports: { type: 'geojson', data: EMPTY },
-      escape: { type: 'geojson', data: EMPTY }, 'escape-pts': { type: 'geojson', data: EMPTY },
+      'esc-seg': { type: 'geojson', data: EMPTY }, 'esc-branch': { type: 'geojson', data: EMPTY }, 'esc-apt': { type: 'geojson', data: EMPTY }, 'esc-dp': { type: 'geojson', data: EMPTY },
       ownship: { type: 'geojson', data: EMPTY }, route: { type: 'geojson', data: EMPTY }, crossing: { type: 'geojson', data: EMPTY },
     },
     layers: [
@@ -73,12 +74,8 @@ export function buildStyle(base, t = tokens()) {
       { id: 'airway', type: 'line', source: 'airways', paint: { 'line-color': ['match', ['get', 'level'], 'lower', t.awyLow, t.awyUp], 'line-width': ['interpolate', ['linear'], ['zoom'], 3, 0.6, 5, 1, 7, 1.5, 9, 2.25] } },
       { id: 'airway-label', type: 'symbol', source: 'airways', minzoom: 5, layout: { 'symbol-placement': 'line', 'symbol-spacing': 380, 'text-field': ['get', 'ident'], 'text-font': font('b'), 'text-size': ['interpolate', ['linear'], ['zoom'], 5, 10, 8, 12], 'text-rotation-alignment': 'viewport', 'text-padding': 8 }, paint: { 'text-color': t.awyUp, 'text-halo-color': t.halo, 'text-halo-width': 2 } },
 
-      // escape routes (Jeppesen ANDES charts, server only): neutral ink line with a white casing, as a route
-      { id: 'escape-casing', type: 'line', source: 'escape', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': t.routeCase, 'line-width': 6 } },
-      { id: 'escape-line', type: 'line', source: 'escape', filter: ['!=', ['get', 'kind'], 'branch'], layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': t.route, 'line-width': 3 } },
-      { id: 'escape-branch', type: 'line', source: 'escape', filter: ['==', ['get', 'kind'], 'branch'], layout: { 'line-join': 'round' }, paint: { 'line-color': t.route, 'line-width': 2.5, 'line-dasharray': [2, 1.5] } },
-      { id: 'escape-pt', type: 'circle', source: 'escape-pts', paint: { 'circle-radius': 4, 'circle-color': t.routeCase, 'circle-stroke-color': t.route, 'circle-stroke-width': 1.5 } },
-      { id: 'escape-pt-label', type: 'symbol', source: 'escape-pts', minzoom: 5, layout: { 'text-field': ['get', 'ident'], 'text-font': font('b'), 'text-size': 11, 'text-offset': [0.8, 0], 'text-anchor': 'left' }, paint: { 'text-color': t.label, 'text-halo-color': t.halo, 'text-halo-width': 1.5 } },
+      // escape routes (Jeppesen ANDES charts, server only): each stretch in the colour of its escape airport (escape.js)
+      ...escapeLayers({ ...t.esc, ink: t.label, casing: t.routeCase, halo: t.halo, other: t.label2 }),
 
       // planned route: neutral line, risk-coloured casing (DESIGN §3.2 item 14)
       { id: 'route-risk', type: 'line', source: 'route', layout: { 'line-cap': 'round', 'line-join': 'round' }, paint: { 'line-color': riskColor(t), 'line-width': 9, 'line-opacity': ['case', ['>', ['get', 'cat'], 0], 0.95, 0.5] } },
@@ -117,6 +114,7 @@ export function addImages(map, t = tokens()) {
     map.addImage(id, g.getImageData(0, 0, size, size), { pixelRatio: 2, sdf });
   };
   draw('hex', 48, (g, s) => { g.lineWidth = 4; g.beginPath(); for (let i = 0; i < 6; i++) { const a = Math.PI / 3 * i; g.lineTo(s / 2 + 16 * Math.cos(a), s / 2 + 16 * Math.sin(a)); } g.closePath(); g.stroke(); g.beginPath(); g.arc(s / 2, s / 2, 3, 0, 7); g.fill(); });
+  draw('diamond', 40, (g, s) => { g.beginPath(); g.moveTo(s / 2, 3); g.lineTo(s - 3, s / 2); g.lineTo(s / 2, s - 3); g.lineTo(3, s / 2); g.closePath(); g.fill(); });
   draw('ownship', 64, (g, s) => { g.beginPath(); g.moveTo(s / 2, 6); g.lineTo(s - 12, s - 8); g.lineTo(s / 2, s - 20); g.lineTo(12, s - 8); g.closePath(); g.fill(); });
   // 45° hatch for severe, tinted with the hatch token (not SDF: a pattern)
   draw('hatch', 16, (g, s) => { g.strokeStyle = t.hatch || 'rgba(255,255,255,.38)'; g.lineWidth = 1.5; g.beginPath(); for (let k = -s; k < s * 2; k += 8) { g.moveTo(k, s); g.lineTo(k + s, 0); } g.stroke(); }, false);

@@ -189,3 +189,13 @@ html:not(:is([data-k-arr="A1b"], [data-k-arr="A2"], [data-k-arr="A3"], [data-k-a
 .ac3d-vx { color: var(--slate); }
 .ac3d-vx[hidden] { display: none; }
 /* ==== 3D scene — end ==================================================================================== */
+
+/* ---- Escape routes: one colour per escape airport (--esc-*), set per row as --esc ---- */
+.ac-esc-chips .k-chip[aria-pressed="true"] { background: var(--ink); color: var(--paper); }
+.ac-esc-seg { padding: var(--s-3) 0; border-bottom: .5px solid var(--sep); }
+.ac-esc-head { display: flex; align-items: center; gap: var(--s-2); }
+.ac-esc-sw { width: 14px; height: 14px; border-radius: 4px; background: var(--esc); flex: none; }
+.ac-esc-to { margin-left: auto; font: var(--t-headline); color: var(--esc); }
+.ac-esc-seg .k-subhead { margin: var(--s-1) 0 0; }
+.ac-esc-now { margin: var(--s-3) 0; padding: var(--s-3) var(--s-4); border-radius: var(--r-card); background: var(--fill-2); border-left: 6px solid var(--esc, var(--slate)); }
+.ac-esc-seg .ac-row-sub { white-space: normal; overflow-wrap: anywhere; }
