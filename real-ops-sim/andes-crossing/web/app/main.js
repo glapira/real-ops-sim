@@ -67,7 +67,13 @@ async function boot() {
   setInterval(refresh, 15 * 60e3);
   window.addEventListener('online', () => { refresh(); D.flushReports().then(renderReportTab); });
   window.addEventListener('offline', () => status('Offline: showing the last saved data.', 'amber'));
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js').then(reg => {
+      // a new release installed: tell the crew once, the next open uses it (never reload in the middle of a flight)
+      reg.addEventListener('updatefound', () => { const w = reg.installing; w && w.addEventListener('statechange', () => {
+        if (w.state === 'installed' && navigator.serviceWorker.controller) toast('App updated. The new version opens next time.'); }); });
+    }).catch(() => {});
+  }
 }
 
 // ---------- camera ----------

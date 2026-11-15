@@ -63,7 +63,10 @@ export async function crestModel(coords) {
   const url = 'https://api.open-meteo.com/v1/gfs?latitude=' + coords.map(c => c[1]).join(',') +
     '&longitude=' + coords.map(c => c[0]).join(',') + '&hourly=' + v.join(',') +
     '&wind_speed_unit=kn&forecast_hours=48&timezone=UTC';
-  const r = await getJSON(url, 'ac.gfs.crest', 60 * 60e3);
+  // the device asks Open-Meteo directly; if that fails (offline quota, blocked address) the server's cached copy is used
+  let r;
+  try { r = await getJSON(url, 'ac.gfs.crest', 60 * 60e3); if (r.data?.error) throw new Error(r.data.reason || 'model error'); }
+  catch (e) { r = await getJSON('api/model.php?' + url.split('?')[1], 'ac.gfs.crest.server', 60 * 60e3); }
   const list = Array.isArray(r.data) ? r.data : [r.data];
   const times = list[0]?.hourly?.time || [];
   // samples[t] = [{coord, lv}] for each forecast hour t
