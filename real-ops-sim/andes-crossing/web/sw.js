@@ -26,7 +26,7 @@ self.addEventListener('fetch', e => {
   e.respondWith(cacheFirst(e.request, V));
 });
 async function cacheFirst(req, name) {
-  const c = await caches.open(name), hit = await c.match(req);
+  const c = await caches.open(name), hit = await c.match(req, { ignoreSearch: name !== TILES });
   if (hit) return hit;
   try { const r = await fetch(req); if (r.ok) c.put(req, r.clone()); return r; }
   catch { return new Response('', { status: 504 }); }

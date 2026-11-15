@@ -1,0 +1,11 @@
+# Andes Crossing: the app shell must never be held by Cloudflare or the browser, so each release reaches every device.
+# Code and styles are stamped ?v=<release> by the deploy, so they can be cached long.
+<IfModule mod_headers.c>
+  <FilesMatch "^(index\.html|sw\.js|manifest\.webmanifest)$">
+    Header set Cache-Control "no-cache, must-revalidate"
+  </FilesMatch>
+  <FilesMatch "\.json$">
+    Header set Cache-Control "public, max-age=300"
+  </FilesMatch>
+</IfModule>
+DirectoryIndex index.html

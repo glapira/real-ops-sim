@@ -101,7 +101,7 @@ async function refresh() {
     D.sigmets().then(r => { S.sigmet = r.data; S.sigmetAt = r.at; map.getSource('sigmet').setData(r.data); }).catch(() => {}),
     fetch('data/wafs/index.json', { cache: 'no-store' }).then(r => r.ok ? r.json() : null).then(j => { S.wafs = j; }).catch(() => {}),
   ];
-  const samples = E.crestSamples(S.crest, -24, -50, 1);
+  const samples = E.crestSamples(S.crest, 11, -55, 1);   // the whole range, Venezuela to Tierra del Fuego
   tasks.push(D.crestModel(samples).then(r => { S.model = r.data; S.modelAt = r.at; S.modelStale = r.stale; S.modelErr = null; })
     .catch(e => { S.modelErr = String(e); }));
   await Promise.all(tasks);
